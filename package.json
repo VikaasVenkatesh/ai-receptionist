@@ -1,0 +1,24 @@
+{
+  "name": "ai-receptionist",
+  "version": "1.0.0",
+  "description": "Barebones AI-powered phone receptionist using Twilio, Deepgram, Claude, and Google Calendar",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@deepgram/sdk": "^3.5.0",
+    "@google-cloud/text-to-speech": "^5.3.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-ws": "^5.0.2",
+    "googleapis": "^140.0.1",
+    "twilio": "^5.3.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
