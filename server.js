@@ -19,7 +19,11 @@ app.use(express.json());
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
 
 const PORT = process.env.PORT || 3000;
-const NGROK_URL = process.env.NGROK_URL || `http://localhost:${PORT}`;
+
+// Railway sets RAILWAY_PUBLIC_DOMAIN automatically; fall back to BASE_URL for local dev.
+const BASE_URL = process.env.RAILWAY_PUBLIC_DOMAIN
+  ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+  : (process.env.BASE_URL || `http://localhost:${PORT}`);
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
@@ -30,7 +34,7 @@ const NGROK_URL = process.env.NGROK_URL || `http://localhost:${PORT}`;
 app.post('/incoming-call', (req, res) => {
   const callSid = req.body?.CallSid;
   console.log(`[Server] Incoming call: ${callSid}`);
-  res.type('text/xml').send(incomingCallTwiml(NGROK_URL));
+  res.type('text/xml').send(incomingCallTwiml(BASE_URL));
 });
 
 /**
@@ -41,7 +45,7 @@ app.post('/play-reply', (req, res) => {
   const text = req.query.text || "I'm sorry, something went wrong.";
   const callSid = req.query.callSid;
   console.log(`[Server] Playing reply for ${callSid}: "${text}"`);
-  res.type('text/xml').send(replyTwiml(decodeURIComponent(text), NGROK_URL));
+  res.type('text/xml').send(replyTwiml(decodeURIComponent(text), BASE_URL));
 });
 
 /**
@@ -189,7 +193,7 @@ async function handleUtterance(callSid, utterance) {
 
   // Redirect the call to a TwiML endpoint that will <Say> the reply
   const replyUrl =
-    `${NGROK_URL}/play-reply` +
+    `${BASE_URL}/play-reply` +
     `?callSid=${encodeURIComponent(callSid)}` +
     `&text=${encodeURIComponent(replyText)}`;
 
@@ -205,8 +209,6 @@ async function handleUtterance(callSid, utterance) {
 
 app.listen(PORT, () => {
   console.log(`\n✅ AI Receptionist running on port ${PORT}`);
-  console.log(`\nMake sure ngrok is running:`);
-  console.log(`  ngrok http ${PORT}`);
-  console.log(`\nThen set NGROK_URL in .env and configure Twilio webhook:`);
-  console.log(`  ${NGROK_URL}/incoming-call  (HTTP POST)\n`);
+  console.log(`   Public base URL: ${BASE_URL}`);
+  console.log(`   Twilio webhook:  ${BASE_URL}/incoming-call  (HTTP POST)\n`);
 });
