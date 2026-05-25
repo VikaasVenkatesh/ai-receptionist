@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Receptionist — Acme Clinic</title>
+  <title>AI Receptionist — Han Kim, DC</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -54,7 +54,7 @@
           </svg>
         </div>
         <div>
-          <h1 class="text-base font-semibold text-slate-900">Acme Clinic</h1>
+          <h1 class="text-base font-semibold text-slate-900">Han Kim, DC</h1>
           <p class="text-xs text-slate-500">AI Receptionist Dashboard</p>
         </div>
       </div>
@@ -110,7 +110,7 @@
             </svg>
           </div>
           <p class="text-slate-400 text-sm">Waiting for incoming call…</p>
-          <p class="text-slate-300 text-xs">Call <span id="phoneDisplay" class="font-mono">—</span> to test</p>
+          <p class="text-slate-300 text-xs">Call <span id="phoneDisplay" class="font-mono font-semibold text-slate-400">—</span> to test</p>
         </div>
 
         <!-- Active state (hidden until call starts) -->
@@ -184,21 +184,100 @@
       </div>
     </div>
 
-    <!-- ── How it works (for the doctor) ── -->
+    <!-- ── How it works ── -->
     <div class="bg-white rounded-xl border border-slate-200 p-6">
-      <h2 class="text-sm font-semibold text-slate-700 mb-4">How It Works</h2>
-      <div class="grid grid-cols-5 gap-2 items-center">
-        <Step icon="📞" label="Patient calls your number" />
-        <Arrow />
-        <Step icon="🎙️" label="AI listens &amp; transcribes speech in real time" />
-        <Arrow />
-        <Step icon="🧠" label="Claude AI understands intent &amp; replies" />
+      <h2 class="text-sm font-semibold text-slate-700 mb-5">How It Works</h2>
+      <div class="flex items-center gap-2 flex-wrap justify-center">
+        <div class="flex flex-col items-center text-center gap-2 w-28">
+          <div class="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-2xl">📞</div>
+          <p class="text-xs text-slate-600 leading-tight">Patient calls your Twilio number</p>
+        </div>
+        <div class="text-slate-300 text-xl mb-4">→</div>
+        <div class="flex flex-col items-center text-center gap-2 w-28">
+          <div class="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-2xl">🎙️</div>
+          <p class="text-xs text-slate-600 leading-tight">Deepgram transcribes speech in real time</p>
+        </div>
+        <div class="text-slate-300 text-xl mb-4">→</div>
+        <div class="flex flex-col items-center text-center gap-2 w-28">
+          <div class="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-2xl">🧠</div>
+          <p class="text-xs text-slate-600 leading-tight">Claude AI understands &amp; generates a reply</p>
+        </div>
+        <div class="text-slate-300 text-xl mb-4">→</div>
+        <div class="flex flex-col items-center text-center gap-2 w-28">
+          <div class="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-2xl">🔊</div>
+          <p class="text-xs text-slate-600 leading-tight">Caller hears a natural voice response</p>
+        </div>
+        <div class="text-slate-300 text-xl mb-4">→</div>
+        <div class="flex flex-col items-center text-center gap-2 w-28">
+          <div class="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-2xl">📅</div>
+          <p class="text-xs text-slate-600 leading-tight">Appointment booked on Google Calendar</p>
+        </div>
       </div>
-      <div class="grid grid-cols-5 gap-2 items-center mt-4 pl-[calc(40%+0.5rem)]">
-        <Arrow class="rotate-180" />
-        <Step icon="🔊" label="Caller hears natural voice reply" />
-        <Arrow />
-        <Step icon="📅" label="Appointment added to Google Calendar" />
+    </div>
+
+    <!-- ── Testing guide ── -->
+    <div class="bg-white rounded-xl border border-slate-200 p-6">
+      <h2 class="text-sm font-semibold text-slate-700 mb-4">How to Test the Demo</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Left: steps -->
+        <div class="space-y-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Steps</p>
+          <ol class="space-y-3">
+            <li class="flex gap-3">
+              <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+              <div>
+                <p class="text-sm text-slate-700 font-medium">Call the Twilio number</p>
+                <p class="text-xs text-slate-500 mt-0.5">Dial <span id="phoneDisplay2" class="font-mono font-semibold text-slate-700">shown above in the idle panel</span> from any phone. You'll hear a greeting.</p>
+              </div>
+            </li>
+            <li class="flex gap-3">
+              <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">2</span>
+              <div>
+                <p class="text-sm text-slate-700 font-medium">Watch this dashboard</p>
+                <p class="text-xs text-slate-500 mt-0.5">Keep this page open on a laptop. Every word you say and every AI reply appears here in real time.</p>
+              </div>
+            </li>
+            <li class="flex gap-3">
+              <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">3</span>
+              <div>
+                <p class="text-sm text-slate-700 font-medium">Ask about services or hours</p>
+                <p class="text-xs text-slate-500 mt-0.5">Try: <em>"What services do you offer?"</em> or <em>"What are your hours?"</em></p>
+              </div>
+            </li>
+            <li class="flex gap-3">
+              <span class="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-600 text-white text-xs flex items-center justify-center font-bold">4</span>
+              <div>
+                <p class="text-sm text-slate-700 font-medium">Book an appointment</p>
+                <p class="text-xs text-slate-500 mt-0.5">Say: <em>"I'd like to book an appointment."</em> The AI will ask for your name, preferred time, and reason. Watch the green card appear here when it's confirmed.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <!-- Right: sample scripts -->
+        <div class="space-y-3">
+          <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Sample Scripts to Try</p>
+          <div class="space-y-2">
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <p class="text-xs font-semibold text-slate-600 mb-1">💬 General inquiry</p>
+              <p class="text-xs text-slate-500 italic">"Hi, what kind of treatments do you offer for back pain?"</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <p class="text-xs font-semibold text-slate-600 mb-1">🕐 Hours question</p>
+              <p class="text-xs text-slate-500 italic">"Are you open on weekends? What time do you close on Saturdays?"</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <p class="text-xs font-semibold text-slate-600 mb-1">📅 Book an appointment</p>
+              <p class="text-xs text-slate-500 italic">"I hurt my lower back and I'd like to come in. My name is John Smith and I'm free this Thursday at 2pm."</p>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3 border border-slate-100">
+              <p class="text-xs font-semibold text-slate-600 mb-1">🚗 Personal injury</p>
+              <p class="text-xs text-slate-500 italic">"I was in a car accident last week and I have neck pain. Can I see Dr. Kim?"</p>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -408,7 +487,11 @@ function escHtml(str) {
 
 // Show the phone number if available
 fetch('/phone-number').then(r => r.json()).then(d => {
-  if (d.number) document.getElementById('phoneDisplay').textContent = d.number;
+  if (d.number) {
+    document.getElementById('phoneDisplay').textContent = d.number;
+    const p2 = document.getElementById('phoneDisplay2');
+    if (p2) p2.textContent = d.number;
+  }
 }).catch(() => {});
 
 connect();
