@@ -27,6 +27,10 @@ const BASE_URL = process.env.RAILWAY_PUBLIC_DOMAIN
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+app.get('/', (req, res) => {
+  res.send('✅ AI Receptionist is running. Twilio webhook: POST /incoming-call');
+});
+
 /**
  * Twilio hits this when someone calls the Twilio number.
  * We greet the caller and open a bidirectional media stream.

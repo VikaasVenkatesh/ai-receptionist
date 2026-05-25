@@ -10,13 +10,24 @@ let _calendar = null;
 function getCalendar() {
   if (_calendar) return _calendar;
 
-  const keyPath = path.resolve(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH);
+  let key;
 
-  if (!fs.existsSync(keyPath)) {
-    throw new Error(`Google service account key not found at: ${keyPath}`);
+  // Prefer env var (Railway/production) — paste the full JSON as the value
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    key = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  } else {
+    // Fall back to file path (local dev)
+    const keyPath = path.resolve(
+      process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH || './config/google-service-account.json'
+    );
+    if (!fs.existsSync(keyPath)) {
+      throw new Error(
+        'Google service account not configured. Set GOOGLE_SERVICE_ACCOUNT_JSON env var or provide the key file.'
+      );
+    }
+    key = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
   }
 
-  const key = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
   const auth = new google.auth.JWT(
     key.client_email,
     null,
