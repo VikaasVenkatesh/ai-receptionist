@@ -2,6 +2,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const { SYSTEM_PROMPT } = require('../config/prompts');
+const bus = require('./eventBus');
 
 const client = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -24,6 +25,7 @@ async function processUtterance(callSid, utterance) {
 
   const history = conversations.get(callSid);
   history.push({ role: 'user', content: utterance });
+  bus.emit('call:transcript', { callSid, text: utterance });
 
   let rawReply;
   try {
@@ -55,6 +57,7 @@ async function processUtterance(callSid, utterance) {
 
   // Strip the JSON block from the spoken text
   const spokenText = rawReply.replace(BOOK_PATTERN, '').trim();
+  bus.emit('call:reply', { callSid, text: spokenText });
 
   history.push({ role: 'assistant', content: rawReply });
 
