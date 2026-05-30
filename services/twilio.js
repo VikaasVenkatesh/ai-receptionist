@@ -13,7 +13,7 @@ function incomingCallTwiml(ngrokUrl) {
 
   twiml.say(
     { voice: 'Polly.Joanna', language: 'en-US' },
-    'Hi, thanks for calling Acme Clinic. How can I help you today?'
+    'Hi, thanks for calling Dr. Han Kim\'s office. How can I help you today?'
   );
 
   const connect = twiml.connect();
