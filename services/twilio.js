@@ -8,17 +8,23 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
  *  1. Greets the caller with <Say>
  *  2. Opens a bidirectional media stream to our WebSocket endpoint
  */
-function incomingCallTwiml(ngrokUrl) {
+function incomingCallTwiml(baseUrl) {
   const twiml = new VoiceResponse();
 
   twiml.say(
     { voice: 'Polly.Joanna', language: 'en-US' },
-    'Hi, thanks for calling Dr. Han Kim\'s office. How can I help you today?'
+    "Hi, thanks for calling Dr. Han Kim's office. How can I help you today?"
   );
 
   const connect = twiml.connect();
-  const wsUrl = ngrokUrl.replace(/^https?/, 'wss') + '/media-stream';
+  const wsUrl = baseUrl.replace(/^https?/, 'wss') + '/media-stream';
   connect.stream({ url: wsUrl });
+
+  // Fallback if the stream closes unexpectedly — tells the caller rather than dead air
+  twiml.say(
+    { voice: 'Polly.Joanna', language: 'en-US' },
+    "I'm sorry, I lost your connection. Please call back and I'll be happy to help."
+  );
 
   return twiml.toString();
 }

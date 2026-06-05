@@ -29,20 +29,41 @@ const BASE_URL = process.env.RAILWAY_PUBLIC_DOMAIN
 
 // ─── SSE — push live events to dashboard browsers ────────────────────────────
 
-// Keep track of all open SSE connections
 const sseClients = new Set();
+
+// Rolling buffer of last 100 events — replayed to any new client on connect
+// so reloading the dashboard still shows history
+const eventHistory = [];
+const MAX_HISTORY = 100;
+
+function broadcast(type, payload) {
+  const event = { type, ...payload, ts: Date.now() };
+  const data = `data: ${JSON.stringify(event)}\n\n`;
+  eventHistory.push(data);
+  if (eventHistory.length > MAX_HISTORY) eventHistory.shift();
+  for (const client of sseClients) {
+    try { client.write(data); } catch (_) {}
+  }
+}
 
 app.get('/events', (req, res) => {
   res.set({
-    'Content-Type':  'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection':    'keep-alive',
-    'X-Accel-Buffering': 'no', // disable nginx buffering on Railway
+    'Content-Type':      'text/event-stream',
+    'Cache-Control':     'no-cache',
+    'Connection':        'keep-alive',
+    'X-Accel-Buffering': 'no',
   });
   res.flushHeaders();
 
-  // Send a heartbeat every 25 s so the connection stays open
-  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 25000);
+  // Replay history so a fresh page load sees past activity
+  for (const item of eventHistory) {
+    try { res.write(item); } catch (_) {}
+  }
+
+  // Heartbeat every 20 s — keeps Railway + Safari from closing the connection
+  const heartbeat = setInterval(() => {
+    try { res.write(': heartbeat\n\n'); } catch (_) {}
+  }, 20000);
 
   sseClients.add(res);
   req.on('close', () => {
@@ -50,13 +71,6 @@ app.get('/events', (req, res) => {
     sseClients.delete(res);
   });
 });
-
-function broadcast(type, payload) {
-  const data = `data: ${JSON.stringify({ type, ...payload, ts: Date.now() })}\n\n`;
-  for (const client of sseClients) {
-    try { client.write(data); } catch (_) {}
-  }
-}
 
 // Wire all bus events → SSE broadcast
 bus.on('call:started',    (p) => broadcast('call:started',    p));

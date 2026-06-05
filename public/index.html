@@ -325,14 +325,26 @@ function connect() {
   const es = new EventSource('/events');
 
   es.onmessage = (e) => {
-    const ev = JSON.parse(e.data);
-    handleEvent(ev);
+    try {
+      const ev = JSON.parse(e.data);
+      handleEvent(ev);
+    } catch (_) {}
+  };
+
+  es.onopen = () => {
+    document.getElementById('liveIndicator').innerHTML = `
+      <div class="relative flex items-center justify-center w-3 h-3">
+        <span class="absolute inline-flex w-full h-full rounded-full bg-emerald-400 opacity-75 pulse-ring"></span>
+        <span class="relative inline-flex w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+      </div>
+      <span class="text-sm font-medium text-emerald-600">Live</span>`;
   };
 
   es.onerror = () => {
-    // Auto-reconnects; show disconnected state briefly
-    setStatus('Reconnecting…', 'yellow');
-    setTimeout(() => {}, 2000);
+    document.getElementById('liveIndicator').innerHTML = `
+      <div class="w-2.5 h-2.5 rounded-full bg-yellow-400"></div>
+      <span class="text-sm font-medium text-yellow-600">Reconnecting…</span>`;
+    // EventSource auto-reconnects; nothing else needed
   };
 }
 
