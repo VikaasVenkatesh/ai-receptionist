@@ -21,7 +21,7 @@ function createDeepgramStream(onTranscript, onError) {
     model:           'nova-2',
     language:        'en-US',
     punctuate:       'true',
-    interim_results: 'false',
+    interim_results: 'true',   // required for utterance_end_ms to work
     utterance_end_ms:'1500',
     vad_events:      'true',
   });
