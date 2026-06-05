@@ -1,66 +1,83 @@
 'use strict';
 
-const { createClient, LiveTranscriptionEvents } = require('@deepgram/sdk');
+const WebSocket = require('ws');
 
 /**
- * Opens a Deepgram live-transcription WebSocket configured for Twilio's
- * mulaw 8kHz audio format.
+ * Opens a raw WebSocket to Deepgram's live transcription endpoint,
+ * configured for Twilio's mulaw 8 kHz audio format.
+ *
+ * Using a direct ws connection instead of the Deepgram SDK to avoid
+ * SDK version quirks with WebSocket lifecycle management.
  *
  * @param {function} onTranscript - called with the final transcript string
  * @param {function} onError      - called with an Error
  * @returns {{ send: function, close: function }}
  */
 function createDeepgramStream(onTranscript, onError) {
-  const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
-
-  const live = deepgram.listen.live({
-    encoding: 'mulaw',
-    sample_rate: 8000,
-    channels: 1,
-    model: 'nova-2',
-    language: 'en-US',
-    punctuate: true,
-    interim_results: false,
-    utterance_end_ms: 1500,
-    vad_events: true,
+  const params = new URLSearchParams({
+    encoding:        'mulaw',
+    sample_rate:     '8000',
+    channels:        '1',
+    model:           'nova-2',
+    language:        'en-US',
+    punctuate:       'true',
+    interim_results: 'false',
+    utterance_end_ms:'1500',
+    vad_events:      'true',
   });
 
-  live.on(LiveTranscriptionEvents.Open, () => {
+  const url = `wss://api.deepgram.com/v1/listen?${params.toString()}`;
+
+  const ws = new WebSocket(url, {
+    headers: { Authorization: `Token ${process.env.DEEPGRAM_API_KEY}` },
+  });
+
+  ws.on('open', () => {
     console.log('[Deepgram] Connection opened');
   });
 
-  live.on(LiveTranscriptionEvents.Transcript, (data) => {
-    const transcript = data?.channel?.alternatives?.[0]?.transcript ?? '';
-    const isFinal = data?.is_final;
+  ws.on('message', (raw) => {
+    let data;
+    try { data = JSON.parse(raw); } catch { return; }
 
-    if (isFinal && transcript.trim()) {
-      console.log('[Deepgram] Final transcript:', transcript);
-      onTranscript(transcript.trim());
+    // Final transcript
+    if (data.type === 'Results') {
+      const transcript = data?.channel?.alternatives?.[0]?.transcript ?? '';
+      const isFinal    = data?.is_final;
+      if (isFinal && transcript.trim()) {
+        console.log('[Deepgram] Transcript:', transcript);
+        onTranscript(transcript.trim());
+      }
+    }
+
+    // Utterance end (caller stopped talking)
+    if (data.type === 'UtteranceEnd') {
+      console.log('[Deepgram] Utterance end');
     }
   });
 
-  live.on(LiveTranscriptionEvents.UtteranceEnd, () => {
-    // Deepgram signals the caller stopped speaking
-    console.log('[Deepgram] Utterance end detected');
+  ws.on('close', (code, reason) => {
+    console.log(`[Deepgram] Connection closed (code=${code} reason=${reason})`);
+    if (code !== 1000) {
+      onError(new Error(`Deepgram closed with code ${code}: ${reason}`));
+    }
   });
 
-  live.on(LiveTranscriptionEvents.Error, (err) => {
-    console.error('[Deepgram] Error:', err);
+  ws.on('error', (err) => {
+    console.error('[Deepgram] WebSocket error:', err.message);
     onError(err);
-  });
-
-  live.on(LiveTranscriptionEvents.Close, () => {
-    console.log('[Deepgram] Connection closed');
   });
 
   return {
     send(audioBuffer) {
-      if (live.getReadyState() === 1 /* OPEN */) {
-        live.send(audioBuffer);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(audioBuffer);
       }
     },
     close() {
-      try { live.finish(); } catch (_) {}
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close(1000, 'call ended');
+      }
     },
   };
 }
