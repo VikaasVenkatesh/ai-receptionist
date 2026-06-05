@@ -59,11 +59,16 @@ function createDeepgramStream(onTranscript, onError) {
   ws.on('close', (code, reason) => {
     console.log(`[Deepgram] Connection closed (code=${code} reason=${reason})`);
     if (code !== 1000) {
-      onError(new Error(`Deepgram closed with code ${code}: ${reason}`));
+      const err = new Error(`Deepgram closed with code ${code}: ${reason}`);
+      err.code = code;
+      onError(err);
     }
   });
 
   ws.on('error', (err) => {
+    // Attach HTTP status if present (e.g. 429 rate limit)
+    const status = err.message.match(/(\d{3})/)?.[1];
+    if (status) err.httpStatus = parseInt(status, 10);
     console.error('[Deepgram] WebSocket error:', err.message);
     onError(err);
   });

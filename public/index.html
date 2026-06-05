@@ -351,6 +351,7 @@ function connect() {
 // ── Event handlers ───────────────────────────────────────────────────────────
 function handleEvent(ev) {
   switch (ev.type) {
+    case 'stats':           onStats(ev);          break;
     case 'call:started':    onCallStarted(ev);    break;
     case 'call:transcript': onTranscript(ev);     break;
     case 'call:reply':      onReply(ev);          break;
@@ -358,6 +359,14 @@ function handleEvent(ev) {
     case 'call:ended':      onCallEnded(ev);      break;
     case 'call:error':      onError(ev);          break;
   }
+}
+
+function onStats(ev) {
+  // Authoritative server-side counts — overwrite local counters on connect/reload
+  callCount    = ev.totalCalls    || 0;
+  bookingCount = ev.totalBookings || 0;
+  document.getElementById('statCalls').textContent    = callCount;
+  document.getElementById('statBookings').textContent = bookingCount;
 }
 
 function onCallStarted(ev) {

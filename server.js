@@ -31,16 +31,28 @@ const BASE_URL = process.env.RAILWAY_PUBLIC_DOMAIN
 
 const sseClients = new Set();
 
-// Rolling buffer of last 100 events — replayed to any new client on connect
-// so reloading the dashboard still shows history
-const eventHistory = [];
-const MAX_HISTORY = 100;
+// Server-side stats — survive page reloads
+const serverStats = { totalCalls: 0, totalBookings: 0 };
+
+// Rolling history — only meaningful events (no error spam)
+const HISTORY_TYPES = new Set(['call:started','call:transcript','call:reply','call:booking','call:ended']);
+const eventHistory  = [];
+const MAX_HISTORY   = 80;
 
 function broadcast(type, payload) {
+  // Track stats server-side
+  if (type === 'call:started')  serverStats.totalCalls++;
+  if (type === 'call:booking' && payload.success) serverStats.totalBookings++;
+
   const event = { type, ...payload, ts: Date.now() };
-  const data = `data: ${JSON.stringify(event)}\n\n`;
-  eventHistory.push(data);
-  if (eventHistory.length > MAX_HISTORY) eventHistory.shift();
+  const data  = `data: ${JSON.stringify(event)}\n\n`;
+
+  // Only persist meaningful events in history (skip error spam)
+  if (HISTORY_TYPES.has(type)) {
+    eventHistory.push(data);
+    if (eventHistory.length > MAX_HISTORY) eventHistory.shift();
+  }
+
   for (const client of sseClients) {
     try { client.write(data); } catch (_) {}
   }
@@ -55,12 +67,17 @@ app.get('/events', (req, res) => {
   });
   res.flushHeaders();
 
-  // Replay history so a fresh page load sees past activity
+  // Send current stats immediately so counters are correct on reload
+  try {
+    res.write(`data: ${JSON.stringify({ type: 'stats', ...serverStats, ts: Date.now() })}\n\n`);
+  } catch (_) {}
+
+  // Replay meaningful event history
   for (const item of eventHistory) {
     try { res.write(item); } catch (_) {}
   }
 
-  // Heartbeat every 20 s — keeps Railway + Safari from closing the connection
+  // Heartbeat every 20 s
   const heartbeat = setInterval(() => {
     try { res.write(': heartbeat\n\n'); } catch (_) {}
   }, 20000);
@@ -135,8 +152,12 @@ app.ws('/media-stream', (ws, req) => {
   let callSid = null;
   let deepgramStream = null;
   let processingUtterance = false;
+  let retryCount  = 0;
+  let retryTimer  = null;
+  const MAX_RETRIES = 8;
 
   function onTranscript(transcript) {
+    retryCount = 0; // successful data — reset backoff
     if (processingUtterance) return;
     processingUtterance = true;
     handleUtterance(callSid, transcript).finally(() => {
@@ -144,14 +165,28 @@ app.ws('/media-stream', (ws, req) => {
     });
   }
 
-  function onDeepgramError(err) {
-    console.error('[WS] Deepgram error — reconnecting in 1s:', err.message);
-    if (callSid) bus.emit('call:error', { callSid, message: 'STT connection dropped, reconnecting…' });
-    setTimeout(() => {
+  function scheduleReconnect(err) {
+    if (ws.readyState !== ws.OPEN) return; // call already ended
+    if (retryCount >= MAX_RETRIES) {
+      console.error('[WS] Deepgram: max retries reached, giving up');
+      if (callSid) bus.emit('call:error', { callSid, message: 'Speech recognition unavailable. Please call back.' });
+      return;
+    }
+
+    // If Deepgram rate-limited us (429), wait much longer
+    const is429   = err?.httpStatus === 429 || err?.message?.includes('429');
+    const baseMs  = is429 ? 30000 : 1000;
+    const delayMs = Math.min(baseMs * Math.pow(2, retryCount), 60000);
+    retryCount++;
+
+    console.log(`[WS] Deepgram reconnect in ${delayMs}ms (attempt ${retryCount}/${MAX_RETRIES})`);
+    if (callSid) bus.emit('call:error', { callSid, message: `STT reconnecting (${retryCount}/${MAX_RETRIES})…` });
+
+    retryTimer = setTimeout(() => {
       if (ws.readyState === ws.OPEN) {
-        deepgramStream = createDeepgramStream(onTranscript, onDeepgramError);
+        deepgramStream = createDeepgramStream(onTranscript, scheduleReconnect);
       }
-    }, 1000);
+    }, delayMs);
   }
 
   ws.on('message', (rawMsg) => {
@@ -162,7 +197,7 @@ app.ws('/media-stream', (ws, req) => {
       case 'start':
         callSid = msg.start?.callSid;
         console.log(`[WS] Stream started — callSid: ${callSid}`);
-        deepgramStream = createDeepgramStream(onTranscript, onDeepgramError);
+        deepgramStream = createDeepgramStream(onTranscript, scheduleReconnect);
         break;
 
       case 'media': {
@@ -181,6 +216,7 @@ app.ws('/media-stream', (ws, req) => {
   });
 
   ws.on('close', () => {
+    clearTimeout(retryTimer); // stop any pending reconnect
     if (deepgramStream) { deepgramStream.close(); deepgramStream = null; }
   });
 
