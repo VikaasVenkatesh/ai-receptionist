@@ -116,7 +116,7 @@
         <!-- Active state (hidden until call starts) -->
         <div id="activeState" class="flex-1 flex flex-col hidden">
           <!-- Caller banner -->
-          <div class="flex items-center gap-3 px-6 py-3 bg-blue-50 border-b border-blue-100">
+          <div id="callerBanner" class="flex items-center gap-3 px-6 py-3 bg-blue-50 border-b border-blue-100">
             <div class="relative">
               <div class="w-9 h-9 rounded-full bg-blue-200 flex items-center justify-center">
                 <svg class="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -124,14 +124,14 @@
                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                 </svg>
               </div>
-              <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white"></span>
+              <span id="callerDot" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white"></span>
             </div>
             <div>
               <p id="callerNumber" class="text-sm font-medium text-slate-800">Unknown caller</p>
-              <p class="text-xs text-blue-500">On the line</p>
+              <p id="callerStatus" class="text-xs text-blue-500">On the line</p>
             </div>
             <!-- Animated sound bars -->
-            <div class="ml-auto flex items-end gap-0.5 h-5">
+            <div id="soundBars" class="ml-auto flex items-end gap-0.5 h-5">
               <div class="w-1 bg-blue-400 rounded-full" style="height:30%;animation:bar 0.8s ease-in-out infinite alternate"></div>
               <div class="w-1 bg-blue-400 rounded-full" style="height:70%;animation:bar 0.8s ease-in-out 0.15s infinite alternate"></div>
               <div class="w-1 bg-blue-400 rounded-full" style="height:50%;animation:bar 0.8s ease-in-out 0.3s infinite alternate"></div>
@@ -377,6 +377,13 @@ function onCallStarted(ev) {
   document.getElementById('activeState').classList.remove('hidden');
   document.getElementById('callTimer').classList.remove('hidden');
   document.getElementById('transcript').innerHTML = '';
+  // Reset banner to "active" look
+  const banner = document.getElementById('callerBanner');
+  banner.className = 'flex items-center gap-3 px-6 py-3 bg-blue-50 border-b border-blue-100';
+  document.getElementById('callerStatus').textContent = 'On the line';
+  document.getElementById('callerStatus').className = 'text-xs text-blue-500';
+  document.getElementById('callerDot').className = 'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white';
+  document.getElementById('soundBars').classList.remove('hidden');
   setStatus('On a call', 'blue');
   callStart = Date.now();
   timerInterval = setInterval(updateTimer, 1000);
@@ -386,11 +393,15 @@ function onCallStarted(ev) {
 function onTranscript(ev) {
   addBubble('caller', ev.text);
   document.getElementById('thinkingIndicator').classList.remove('hidden');
+  const preview = ev.text.length > 55 ? ev.text.slice(0, 55) + '…' : ev.text;
+  logActivity('🎤', `Caller: "${preview}"`);
 }
 
 function onReply(ev) {
   document.getElementById('thinkingIndicator').classList.add('hidden');
   addBubble('ai', ev.text);
+  const preview = ev.text.length > 55 ? ev.text.slice(0, 55) + '…' : ev.text;
+  logActivity('🤖', `AI: "${preview}"`);
 }
 
 function onBooking(ev) {
@@ -408,11 +419,17 @@ function onBooking(ev) {
 
 function onCallEnded(ev) {
   setStatus('Waiting for call', 'slate');
-  document.getElementById('idleState').classList.remove('hidden');
-  document.getElementById('activeState').classList.add('hidden');
+  // Keep activeState visible so the transcript persists — just update the banner
   document.getElementById('callTimer').classList.add('hidden');
   clearInterval(timerInterval);
   const duration = callStart ? Math.round((Date.now() - callStart) / 1000) : 0;
+  // Change banner to "ended" look
+  const banner = document.getElementById('callerBanner');
+  banner.className = 'flex items-center gap-3 px-6 py-3 bg-slate-50 border-b border-slate-200';
+  document.getElementById('callerStatus').textContent = `Call ended · ${formatDuration(duration)}`;
+  document.getElementById('callerStatus').className = 'text-xs text-slate-400';
+  document.getElementById('callerDot').className = 'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-slate-300 border-2 border-white';
+  document.getElementById('soundBars').classList.add('hidden');
   logActivity('📴', `Call ended (${formatDuration(duration)})`);
   callStart = null;
 }

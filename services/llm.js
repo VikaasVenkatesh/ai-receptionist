@@ -30,14 +30,14 @@ async function processUtterance(callSid, utterance) {
   let rawReply;
   try {
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 300,
       system: SYSTEM_PROMPT,
       messages: history,
     });
     rawReply = response.content[0]?.text ?? "I'm sorry, I didn't catch that. Could you repeat?";
   } catch (err) {
-    console.error('[LLM] Claude API error:', err.message);
+    console.error('[LLM] Claude API error — status:', err.status, '| type:', err.error?.error?.type || err.error?.type, '| message:', err.message);
     return {
       text: "I'm sorry, I'm having trouble right now. Could you please repeat that?",
       booking: null,
