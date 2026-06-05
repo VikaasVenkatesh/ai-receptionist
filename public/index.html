@@ -385,23 +385,23 @@ function onCallStarted(ev) {
   document.getElementById('callerDot').className = 'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white';
   document.getElementById('soundBars').classList.remove('hidden');
   setStatus('On a call', 'blue');
-  callStart = Date.now();
+  callStart = ev.ts || Date.now();
   timerInterval = setInterval(updateTimer, 1000);
-  logActivity('📞', `Call started from ${ev.from || 'unknown number'}`);
+  logActivity('📞', `Call started from ${ev.from || 'unknown number'}`, ev.ts);
 }
 
 function onTranscript(ev) {
   addBubble('caller', ev.text);
   document.getElementById('thinkingIndicator').classList.remove('hidden');
   const preview = ev.text.length > 55 ? ev.text.slice(0, 55) + '…' : ev.text;
-  logActivity('🎤', `Caller: "${preview}"`);
+  logActivity('🎤', `Caller: "${preview}"`, ev.ts);
 }
 
 function onReply(ev) {
   document.getElementById('thinkingIndicator').classList.add('hidden');
   addBubble('ai', ev.text);
   const preview = ev.text.length > 55 ? ev.text.slice(0, 55) + '…' : ev.text;
-  logActivity('🤖', `AI: "${preview}"`);
+  logActivity('🤖', `AI: "${preview}"`, ev.ts);
 }
 
 function onBooking(ev) {
@@ -411,9 +411,9 @@ function onBooking(ev) {
     document.getElementById('statBookings').textContent = bookingCount;
     addBookingCard(ev.details);
     showToast(`Booked: ${ev.details.name} on ${ev.details.date} at ${ev.details.time}`);
-    logActivity('📅', `Appointment booked for ${ev.details.name}`);
+    logActivity('📅', `Appointment booked for ${ev.details.name}`, ev.ts);
   } else {
-    logActivity('⚠️', `Booking failed: ${ev.message}`);
+    logActivity('⚠️', `Booking failed: ${ev.message}`, ev.ts);
   }
 }
 
@@ -422,7 +422,8 @@ function onCallEnded(ev) {
   // Keep activeState visible so the transcript persists — just update the banner
   document.getElementById('callTimer').classList.add('hidden');
   clearInterval(timerInterval);
-  const duration = callStart ? Math.round((Date.now() - callStart) / 1000) : 0;
+  const endTs = ev.ts || Date.now();
+  const duration = callStart ? Math.round((endTs - callStart) / 1000) : 0;
   // Change banner to "ended" look
   const banner = document.getElementById('callerBanner');
   banner.className = 'flex items-center gap-3 px-6 py-3 bg-slate-50 border-b border-slate-200';
@@ -430,12 +431,12 @@ function onCallEnded(ev) {
   document.getElementById('callerStatus').className = 'text-xs text-slate-400';
   document.getElementById('callerDot').className = 'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-slate-300 border-2 border-white';
   document.getElementById('soundBars').classList.add('hidden');
-  logActivity('📴', `Call ended (${formatDuration(duration)})`);
+  logActivity('📴', `Call ended (${formatDuration(duration)})`, ev.ts);
   callStart = null;
 }
 
 function onError(ev) {
-  logActivity('⚠️', ev.message || 'An error occurred');
+  logActivity('⚠️', ev.message || 'An error occurred', ev.ts);
 }
 
 // ── UI helpers ───────────────────────────────────────────────────────────────
@@ -471,7 +472,7 @@ function addBookingCard(d) {
   list.prepend(card);
 }
 
-function logActivity(icon, text) {
+function logActivity(icon, text, ts) {
   const log = document.getElementById('activityLog');
   document.getElementById('noActivity')?.remove();
   const el = document.createElement('div');
@@ -479,7 +480,7 @@ function logActivity(icon, text) {
   el.innerHTML = `
     <span class="flex-shrink-0 mt-0.5">${icon}</span>
     <span class="flex-1">${escHtml(text)}</span>
-    <span class="text-slate-400 flex-shrink-0">${now()}</span>`;
+    <span class="text-slate-400 flex-shrink-0 whitespace-nowrap">${fmtStamp(ts)}</span>`;
   log.prepend(el);
 }
 
@@ -515,6 +516,12 @@ function formatDuration(s) {
 
 function now() {
   return new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+}
+
+// Format an event timestamp as a proper date + time (falls back to now if missing)
+function fmtStamp(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  return d.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
 }
 
 function escHtml(str) {
