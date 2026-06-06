@@ -280,6 +280,18 @@ app.ws('/media-stream', (ws, req) => {
 const callQueues = new Map();      // callSid -> Promise (tail of the chain)
 const lastUtterance = new Map();   // callSid -> { text, at }
 
+// Idempotency for bookings. The model sometimes re-emits the booking JSON on a
+// follow-up turn ("yes that's correct" then "thank you"), and Google Calendar's
+// read-after-write is eventually consistent, so the conflict check can miss a
+// near-simultaneous duplicate. We remember recently-booked appointments and
+// suppress an identical one within the TTL so the same slot is never booked twice.
+const recentBookings = new Map();  // "name|date|time" -> timestamp
+const BOOKING_DEDUP_MS = 5 * 60 * 1000;
+
+function bookingKey(b) {
+  return `${String(b.name || '').toLowerCase().trim()}|${b.date}|${b.time}`;
+}
+
 function enqueueUtterance(callSid, transcript) {
   if (!callSid || !transcript) return;
 
@@ -320,17 +332,31 @@ async function handleUtterance(callSid, utterance) {
 
   // Handle calendar booking
   if (booking) {
-    console.log('[handleUtterance] Booking detected:', booking);
-    try {
-      const calResult = await bookAppointment(booking);
-      replyText = (replyText + ' ' + calResult.message).trim();
-      bus.emit('call:booking', { callSid, details: booking, success: calResult.success, message: calResult.message });
-      if (calResult.success) {
-        appendSystemNote(callSid, `Appointment booked: ${JSON.stringify(booking)}`);
+    const key = bookingKey(booking);
+    const prior = recentBookings.get(key);
+
+    if (prior && Date.now() - prior < BOOKING_DEDUP_MS) {
+      // Already booked this exact appointment moments ago — don't book again.
+      console.log(`[handleUtterance] Duplicate booking suppressed: ${key}`);
+    } else {
+      console.log('[handleUtterance] Booking detected:', booking);
+      // Reserve the key up-front so a concurrent/rapid retry can't slip past the
+      // eventually-consistent calendar conflict check.
+      recentBookings.set(key, Date.now());
+      try {
+        const calResult = await bookAppointment(booking);
+        replyText = (replyText + ' ' + calResult.message).trim();
+        bus.emit('call:booking', { callSid, details: booking, success: calResult.success, message: calResult.message });
+        if (calResult.success) {
+          appendSystemNote(callSid, `Appointment booked: ${JSON.stringify(booking)}`);
+        } else {
+          recentBookings.delete(key); // booking failed — allow a genuine retry
+        }
+      } catch (calErr) {
+        console.error('[handleUtterance] Calendar error:', calErr.message);
+        replyText += ' Unfortunately I had trouble accessing the calendar right now.';
+        recentBookings.delete(key);
       }
-    } catch (calErr) {
-      console.error('[handleUtterance] Calendar error:', calErr.message);
-      replyText += ' Unfortunately I had trouble accessing the calendar right now.';
     }
   }
 
