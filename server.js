@@ -156,6 +156,8 @@ app.post('/call-status', (req, res) => {
   if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(CallStatus)) {
     bus.emit('call:ended', { callSid: CallSid, status: CallStatus });
     clearConversation(CallSid);
+    lastUtterance.delete(CallSid);
+    callQueues.delete(CallSid);
   }
   res.sendStatus(204);
 });
@@ -167,18 +169,19 @@ app.ws('/media-stream', (ws, req) => {
 
   let callSid = null;
   let deepgramStream = null;
-  let processingUtterance = false;
   let retryCount  = 0;
   let retryTimer  = null;
   const MAX_RETRIES = 8;
 
   function onTranscript(transcript) {
     retryCount = 0; // successful data — reset backoff
-    if (processingUtterance) return;
-    processingUtterance = true;
-    handleUtterance(callSid, transcript).finally(() => {
-      processingUtterance = false;
-    });
+    // Hand off to the per-call queue. Because every reply reconnects a fresh
+    // media stream (with its own Deepgram), the same call can have overlapping
+    // WebSocket connections briefly. A per-connection flag would let two
+    // utterances be processed concurrently and interleave their Claude calls,
+    // which corrupts the shared conversation history (turns get dropped). The
+    // queue serializes everything per callSid instead.
+    enqueueUtterance(callSid, transcript);
   }
 
   function scheduleReconnect(err) {
@@ -240,6 +243,33 @@ app.ws('/media-stream', (ws, req) => {
 });
 
 // ─── Core call-handling logic ─────────────────────────────────────────────────
+
+// One serialized work queue per call, so utterances are processed strictly in
+// order and never interleave (see onTranscript for why). Also de-dupes the same
+// transcript arriving twice from briefly-overlapping Deepgram streams.
+const callQueues = new Map();      // callSid -> Promise (tail of the chain)
+const lastUtterance = new Map();   // callSid -> { text, at }
+
+function enqueueUtterance(callSid, transcript) {
+  if (!callSid || !transcript) return;
+
+  // Drop an exact-duplicate transcript that lands within 4s (overlapping streams).
+  const prevU = lastUtterance.get(callSid);
+  if (prevU && prevU.text === transcript && Date.now() - prevU.at < 4000) {
+    console.log(`[queue] Dropping duplicate utterance for ${callSid}: "${transcript}"`);
+    return;
+  }
+  lastUtterance.set(callSid, { text: transcript, at: Date.now() });
+
+  const prev = callQueues.get(callSid) || Promise.resolve();
+  const next = prev
+    .then(() => handleUtterance(callSid, transcript))
+    .catch((err) => console.error('[queue] handleUtterance failed:', err.message));
+  callQueues.set(callSid, next);
+  next.finally(() => {
+    if (callQueues.get(callSid) === next) callQueues.delete(callSid); // tail settled
+  });
+}
 
 async function handleUtterance(callSid, utterance) {
   if (!callSid) return;
@@ -307,11 +337,11 @@ app.listen(PORT, async () => {
   if (tts.isEnabled()) {
     try {
       greetingAudioFile = await tts.generateSpeech(GREETING_TEXT, 'greeting');
-      console.log(`   Voice:          ElevenLabs (greeting ${greetingAudioFile ? 'ready' : 'fallback→Polly'})\n`);
+      console.log(`   Voice:          ${tts.activeProvider()} (greeting ${greetingAudioFile ? 'ready' : 'fallback→Polly'})\n`);
     } catch (err) {
-      console.error('   Voice:          ElevenLabs greeting failed, using Polly —', err.message, '\n');
+      console.error('   Voice:          TTS greeting failed, using Polly —', err.message, '\n');
     }
   } else {
-    console.log(`   Voice:          Polly Neural (set ELEVENLABS_API_KEY for human voice)\n`);
+    console.log(`   Voice:          Polly Neural (set DEEPGRAM_API_KEY or ELEVENLABS_API_KEY for human voice)\n`);
   }
 });
