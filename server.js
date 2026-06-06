@@ -48,6 +48,10 @@ const MAX_HISTORY   = 80;
 const activeCalls = new Map();
 const STALE_CALL_MS = 3 * 60 * 1000; // no activity for 3 min → treat as ended
 
+// Monotonic event id so dashboards can ignore events they've already rendered
+// when the SSE stream reconnects and the server replays history.
+let eventSeq = 0;
+
 function broadcast(type, payload) {
   // Track stats server-side
   if (type === 'call:started')  serverStats.totalCalls++;
@@ -61,7 +65,7 @@ function broadcast(type, payload) {
     else if (activeCalls.has(sid)) activeCalls.set(sid, Date.now()); // transcript/reply/booking
   }
 
-  const event = { type, ...payload, ts: Date.now() };
+  const event = { type, ...payload, ts: Date.now(), id: ++eventSeq };
   const data  = `data: ${JSON.stringify(event)}\n\n`;
 
   // Only persist meaningful events in history (skip error spam)

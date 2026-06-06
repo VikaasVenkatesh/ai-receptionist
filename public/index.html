@@ -349,7 +349,15 @@ function connect() {
 }
 
 // ── Event handlers ───────────────────────────────────────────────────────────
+// The SSE stream auto-reconnects on any network blip, and the server replays its
+// event history on every (re)connect. Track ids we've already rendered so a
+// reconnect doesn't duplicate booking cards, transcript lines, etc.
+const seenEventIds = new Set();
 function handleEvent(ev) {
+  if (ev.id != null) {
+    if (seenEventIds.has(ev.id)) return; // already rendered — skip replayed copy
+    seenEventIds.add(ev.id);
+  }
   switch (ev.type) {
     case 'stats':           onStats(ev);          break;
     case 'call:started':    onCallStarted(ev);    break;
