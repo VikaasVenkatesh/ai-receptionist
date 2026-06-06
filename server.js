@@ -40,10 +40,26 @@ const HISTORY_TYPES = new Set(['call:started','call:transcript','call:reply','ca
 const eventHistory  = [];
 const MAX_HISTORY   = 80;
 
+// Live calls, keyed by callSid → last-activity timestamp. Used to auto-close
+// "stale" calls so the dashboard never shows a phantom active call when an
+// end-of-call signal never arrives (e.g. a test POST, or a missed Twilio
+// status callback). A real call has transcript/reply activity every few
+// seconds, so a gap means the call is actually over.
+const activeCalls = new Map();
+const STALE_CALL_MS = 3 * 60 * 1000; // no activity for 3 min → treat as ended
+
 function broadcast(type, payload) {
   // Track stats server-side
   if (type === 'call:started')  serverStats.totalCalls++;
   if (type === 'call:booking' && payload.success) serverStats.totalBookings++;
+
+  // Track live-call activity for the stale-call sweeper
+  const sid = payload.callSid;
+  if (sid) {
+    if (type === 'call:started') activeCalls.set(sid, Date.now());
+    else if (type === 'call:ended') activeCalls.delete(sid);
+    else if (activeCalls.has(sid)) activeCalls.set(sid, Date.now()); // transcript/reply/booking
+  }
 
   const event = { type, ...payload, ts: Date.now() };
   const data  = `data: ${JSON.stringify(event)}\n\n`;
@@ -97,6 +113,20 @@ bus.on('call:reply',      (p) => broadcast('call:reply',      p));
 bus.on('call:booking',    (p) => broadcast('call:booking',    p));
 bus.on('call:ended',      (p) => broadcast('call:ended',      p));
 bus.on('call:error',      (p) => broadcast('call:error',      p));
+
+// Sweep stale calls: if a "live" call has had no activity for STALE_CALL_MS,
+// the real end-of-call signal never arrived — close it out so the dashboard
+// clears instead of showing a phantom call that ticks up forever.
+setInterval(() => {
+  const now = Date.now();
+  for (const [sid, lastTs] of activeCalls) {
+    if (now - lastTs > STALE_CALL_MS) {
+      console.log(`[Sweeper] Auto-ending stale call ${sid} (no activity for ${Math.round((now - lastTs) / 1000)}s)`);
+      bus.emit('call:ended', { callSid: sid, status: 'timeout' });
+      clearConversation(sid);
+    }
+  }
+}, 30 * 1000).unref();
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
