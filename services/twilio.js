@@ -12,7 +12,7 @@ function incomingCallTwiml(baseUrl) {
   const twiml = new VoiceResponse();
 
   twiml.say(
-    { voice: 'Polly.Joanna', language: 'en-US' },
+    { voice: 'Polly.Joanna-Neural', language: 'en-US' },
     "Hi, thanks for calling Dr. Han Kim's office. How can I help you today?"
   );
 
@@ -22,7 +22,7 @@ function incomingCallTwiml(baseUrl) {
 
   // Fallback if the stream closes unexpectedly — tells the caller rather than dead air
   twiml.say(
-    { voice: 'Polly.Joanna', language: 'en-US' },
+    { voice: 'Polly.Joanna-Neural', language: 'en-US' },
     "I'm sorry, I lost your connection. Please call back and I'll be happy to help."
   );
 
@@ -36,7 +36,7 @@ function incomingCallTwiml(baseUrl) {
 function replyTwiml(text, ngrokUrl) {
   const twiml = new VoiceResponse();
 
-  twiml.say({ voice: 'Polly.Joanna', language: 'en-US' }, text);
+  twiml.say({ voice: 'Polly.Joanna-Neural', language: 'en-US' }, text);
 
   const connect = twiml.connect();
   const wsUrl = ngrokUrl.replace(/^https?/, 'wss') + '/media-stream';
@@ -50,7 +50,7 @@ function replyTwiml(text, ngrokUrl) {
  */
 function goodbyeTwiml(text = 'Thank you for calling. Goodbye!') {
   const twiml = new VoiceResponse();
-  twiml.say({ voice: 'Polly.Joanna', language: 'en-US' }, text);
+  twiml.say({ voice: 'Polly.Joanna-Neural', language: 'en-US' }, text);
   twiml.hangup();
   return twiml.toString();
 }

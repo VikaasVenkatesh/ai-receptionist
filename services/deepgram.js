@@ -22,7 +22,8 @@ function createDeepgramStream(onTranscript, onError) {
     language:        'en-US',
     punctuate:       'true',
     interim_results: 'true',   // required for utterance_end_ms to work
-    utterance_end_ms:'1500',
+    utterance_end_ms:'1000',   // shorter silence wait → snappier replies
+    endpointing:     '300',    // finalize quickly once speech stops
     vad_events:      'true',
   });
 

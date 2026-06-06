@@ -1,7 +1,7 @@
 'use strict';
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { SYSTEM_PROMPT } = require('../config/prompts');
+const { buildSystemPrompt } = require('../config/prompts');
 const bus = require('./eventBus');
 
 const client = new Anthropic.default({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -31,8 +31,8 @@ async function processUtterance(callSid, utterance) {
   try {
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 300,
-      system: SYSTEM_PROMPT,
+      max_tokens: 200,
+      system: buildSystemPrompt(),
       messages: history,
     });
     rawReply = response.content[0]?.text ?? "I'm sorry, I didn't catch that. Could you repeat?";

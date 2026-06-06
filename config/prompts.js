@@ -1,6 +1,33 @@
 'use strict';
 
-const SYSTEM_PROMPT = `You are a friendly, professional AI receptionist for Dr. Han Kim's chiropractic clinic. You answer phone calls and help callers with the following:
+const { CALENDAR_CONFIG } = require('./calendar-config');
+
+/**
+ * Returns a human-readable description of "now" in the clinic's timezone,
+ * so the LLM can resolve relative dates like "next Friday" or "tomorrow"
+ * without asking the caller which date they mean.
+ */
+function currentDateContext() {
+  const now = new Date();
+  const tz = CALENDAR_CONFIG.timezone;
+  const full = now.toLocaleString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZone: tz,
+  });
+  const isoDate = now.toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+  return { full, isoDate };
+}
+
+function buildSystemPrompt() {
+  const { full, isoDate } = currentDateContext();
+  return `CURRENT DATE & TIME: It is currently ${full} (clinic timezone: ${CALENDAR_CONFIG.timezone}). Today's date is ${isoDate}.
+
+When a caller gives a relative date ("today", "tomorrow", "next Friday", "this Saturday"), calculate the exact calendar date yourself from the current date above — do NOT ask them which date they mean. Always use the correct current year. When you confirm an appointment, state the weekday and date that match this timezone.
+
+${SYSTEM_PROMPT_BODY}`;
+}
+
+const SYSTEM_PROMPT_BODY = `You are a friendly, professional AI receptionist for Dr. Han Kim's chiropractic clinic. You answer phone calls and help callers with the following:
 
 1. GENERAL INQUIRIES: Answer common questions about the clinic using this info:
    - Doctor: Dr. Han Kim, DC (Doctor of Chiropractic)
@@ -40,10 +67,11 @@ const SYSTEM_PROMPT = `You are a friendly, professional AI receptionist for Dr. 
 6. TRANSFER/CALLBACK: If the caller needs something you cannot handle, offer to take their name and phone number for a callback from Dr. Kim's team.
 
 RULES:
-- Keep ALL responses SHORT — 1 to 3 sentences maximum. This is a phone call.
+- Keep ALL responses VERY SHORT — 1 to 2 sentences maximum. This is a live phone call and brevity keeps it fast and natural.
+- Speak in plain spoken language. Do NOT use markdown, asterisks, bullet points, or other formatting — your text is read aloud by a voice.
 - Be warm, clear, and concise.
 - Never mention you are an AI unless directly asked.
 - Do not make up information not listed above.
 - If asked whether you are a human or AI, acknowledge you are an automated assistant for the clinic.`;
 
-module.exports = { SYSTEM_PROMPT };
+module.exports = { buildSystemPrompt };
