@@ -22,8 +22,7 @@ function createDeepgramStream(onTranscript, onError) {
     language:        'en-US',
     punctuate:       'true',
     interim_results: 'true',   // required for utterance_end_ms to work
-    utterance_end_ms:'1000',   // shorter silence wait → snappier replies
-    endpointing:     '300',    // finalize quickly once speech stops
+    utterance_end_ms:'1200',   // wait a beat longer so we don't cut callers off mid-thought
     vad_events:      'true',
   });
 
@@ -33,6 +32,22 @@ function createDeepgramStream(onTranscript, onError) {
     headers: { Authorization: `Token ${process.env.DEEPGRAM_API_KEY}` },
   });
 
+  // Buffer of finalized speech segments for the CURRENT utterance. Deepgram emits
+  // several `is_final` Results as someone speaks a long sentence; if we fired a
+  // reply on each one we'd cut the caller off mid-thought. Instead we accumulate
+  // every finalized segment and only flush the whole utterance once Deepgram's
+  // VAD reports the caller has actually stopped talking (UtteranceEnd).
+  let pending = [];
+
+  function flush() {
+    const utterance = pending.join(' ').replace(/\s+/g, ' ').trim();
+    pending = [];
+    if (utterance) {
+      console.log('[Deepgram] Utterance:', utterance);
+      onTranscript(utterance);
+    }
+  }
+
   ws.on('open', () => {
     console.log('[Deepgram] Connection opened');
   });
@@ -41,19 +56,19 @@ function createDeepgramStream(onTranscript, onError) {
     let data;
     try { data = JSON.parse(raw); } catch { return; }
 
-    // Final transcript
+    // Finalized segment of the current utterance — buffer it, don't reply yet.
     if (data.type === 'Results') {
       const transcript = data?.channel?.alternatives?.[0]?.transcript ?? '';
       const isFinal    = data?.is_final;
       if (isFinal && transcript.trim()) {
-        console.log('[Deepgram] Transcript:', transcript);
-        onTranscript(transcript.trim());
+        pending.push(transcript.trim());
       }
     }
 
-    // Utterance end (caller stopped talking)
+    // Caller stopped talking — now flush the complete utterance.
     if (data.type === 'UtteranceEnd') {
       console.log('[Deepgram] Utterance end');
+      flush();
     }
   });
 

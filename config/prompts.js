@@ -18,11 +18,40 @@ function currentDateContext() {
   return { full, isoDate };
 }
 
+/**
+ * Builds an explicit weekday→date lookup table for the next `days` days.
+ * LLMs are unreliable at date arithmetic ("next Thursday" → which date) and at
+ * naming a date's weekday, so we hand them the exact mapping instead.
+ */
+function upcomingDatesTable(days = 14) {
+  const tz = CALENDAR_CONFIG.timezone;
+  const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: tz }); // YYYY-MM-DD
+  const [y, m, d] = todayISO.split('-').map(Number);
+  const lines = [];
+  for (let i = 0; i < days; i++) {
+    // Anchor at noon UTC on each successive calendar day → DST-safe weekday/date pairing
+    const dt = new Date(Date.UTC(y, m - 1, d + i, 12, 0, 0));
+    const weekday = dt.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+    const iso = dt.toISOString().slice(0, 10);
+    const label = i === 0 ? '  ← today' : i === 1 ? '  ← tomorrow' : '';
+    lines.push(`  ${weekday}, ${iso}${label}`);
+  }
+  return lines.join('\n');
+}
+
 function buildSystemPrompt() {
   const { full, isoDate } = currentDateContext();
   return `CURRENT DATE & TIME: It is currently ${full} (clinic timezone: ${CALENDAR_CONFIG.timezone}). Today's date is ${isoDate}.
 
-When a caller gives a relative date ("today", "tomorrow", "next Friday", "this Saturday"), calculate the exact calendar date yourself from the current date above — do NOT ask them which date they mean. Always use the correct current year. When you confirm an appointment, state the weekday and date that match this timezone.
+DATE REFERENCE — use this exact table to resolve any spoken date. Do NOT do date math in your head; look up the date here.
+${upcomingDatesTable()}
+
+How to use the table:
+- "next Thursday" / "this Thursday" → find the SOONEST upcoming row whose weekday is Thursday and use that date.
+- "tomorrow" → the row marked tomorrow. "today" → the row marked today.
+- When you confirm, the weekday you say MUST match the weekday next to that date in the table. Never call a date by the wrong weekday.
+- Use the exact YYYY-MM-DD from the table in the booking JSON. Never guess the year.
+- The clinic is open Tuesday–Friday and Saturday only. If the caller picks Sunday or Monday (closed), politely offer the nearest open day.
 
 ${SYSTEM_PROMPT_BODY}`;
 }

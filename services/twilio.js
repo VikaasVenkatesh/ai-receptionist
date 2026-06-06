@@ -8,13 +8,17 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
  *  1. Greets the caller with <Say>
  *  2. Opens a bidirectional media stream to our WebSocket endpoint
  */
-function incomingCallTwiml(baseUrl) {
+const GREETING_TEXT = "Hi, thanks for calling Dr. Han Kim's office. How can I help you today?";
+
+function incomingCallTwiml(baseUrl, greetingAudioUrl = null) {
   const twiml = new VoiceResponse();
 
-  twiml.say(
-    { voice: 'Polly.Joanna-Neural', language: 'en-US' },
-    "Hi, thanks for calling Dr. Han Kim's office. How can I help you today?"
-  );
+  // Use the pre-generated human voice if available; otherwise Polly.
+  if (greetingAudioUrl) {
+    twiml.play(greetingAudioUrl);
+  } else {
+    twiml.say({ voice: 'Polly.Joanna-Neural', language: 'en-US' }, GREETING_TEXT);
+  }
 
   const connect = twiml.connect();
   const wsUrl = baseUrl.replace(/^https?/, 'wss') + '/media-stream';
@@ -46,6 +50,22 @@ function replyTwiml(text, ngrokUrl) {
 }
 
 /**
+ * Like replyTwiml, but plays a pre-generated audio file (e.g. ElevenLabs MP3)
+ * instead of using Twilio's built-in <Say>. Re-opens the media stream after.
+ */
+function replyTwimlAudio(audioUrl, baseUrl) {
+  const twiml = new VoiceResponse();
+
+  twiml.play(audioUrl);
+
+  const connect = twiml.connect();
+  const wsUrl = baseUrl.replace(/^https?/, 'wss') + '/media-stream';
+  connect.stream({ url: wsUrl });
+
+  return twiml.toString();
+}
+
+/**
  * Returns TwiML that says a message and hangs up.
  */
 function goodbyeTwiml(text = 'Thank you for calling. Goodbye!') {
@@ -67,4 +87,4 @@ async function redirectCall(callSid, twimlUrl) {
   await client.calls(callSid).update({ url: twimlUrl, method: 'POST' });
 }
 
-module.exports = { incomingCallTwiml, replyTwiml, goodbyeTwiml, redirectCall };
+module.exports = { incomingCallTwiml, replyTwiml, replyTwimlAudio, goodbyeTwiml, redirectCall, GREETING_TEXT };

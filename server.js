@@ -6,10 +6,11 @@ const express = require('express');
 const expressWs = require('express-ws');
 const path = require('path');
 
-const { incomingCallTwiml, replyTwiml, redirectCall } = require('./services/twilio');
+const { incomingCallTwiml, replyTwiml, replyTwimlAudio, redirectCall, GREETING_TEXT } = require('./services/twilio');
 const { createDeepgramStream } = require('./services/deepgram');
 const { processUtterance, appendSystemNote, clearConversation } = require('./services/llm');
 const { bookAppointment } = require('./services/calendar');
+const tts = require('./services/tts');
 const bus = require('./services/eventBus');
 
 const app = express();
@@ -112,13 +113,21 @@ app.get('/phone-number', (req, res) => {
 /**
  * Twilio hits this when someone calls the Twilio number.
  */
+// Greeting audio is generated once at startup (see bottom) so the very first
+// thing the caller hears is the same human voice as the replies, with no
+// per-call latency. Null when ElevenLabs is disabled → falls back to Polly.
+let greetingAudioFile = null;
+
 app.post('/incoming-call', (req, res) => {
   const callSid = req.body?.CallSid;
   const from    = req.body?.From || 'Unknown';
   const to      = req.body?.To   || '';
   console.log(`[Server] Incoming call: ${callSid} from ${from}`);
   bus.emit('call:started', { callSid, from, to });
-  res.type('text/xml').send(incomingCallTwiml(BASE_URL));
+  const greetingUrl = greetingAudioFile
+    ? `${BASE_URL}/audio/${encodeURIComponent(greetingAudioFile)}`
+    : null;
+  res.type('text/xml').send(incomingCallTwiml(BASE_URL, greetingUrl));
 });
 
 /**
@@ -127,7 +136,14 @@ app.post('/incoming-call', (req, res) => {
 app.post('/play-reply', (req, res) => {
   const text    = req.query.text || "I'm sorry, something went wrong.";
   const callSid = req.query.callSid;
-  console.log(`[Server] Playing reply for ${callSid}: "${text}"`);
+  const audio   = req.query.audio; // ElevenLabs filename, when available
+  console.log(`[Server] Playing reply for ${callSid}: "${text}"${audio ? ' [audio]' : ''}`);
+
+  // Prefer the pre-generated human voice; fall back to Polly <Say> if absent.
+  if (audio) {
+    const audioUrl = `${BASE_URL}/audio/${encodeURIComponent(audio)}`;
+    return res.type('text/xml').send(replyTwimlAudio(audioUrl, BASE_URL));
+  }
   res.type('text/xml').send(replyTwiml(decodeURIComponent(text), BASE_URL));
 });
 
@@ -258,11 +274,21 @@ async function handleUtterance(callSid, utterance) {
     }
   }
 
+  // Pre-generate a natural human voice clip (ElevenLabs). If TTS is disabled or
+  // fails, audioFile stays null and we fall back to Twilio's Polly <Say>.
+  let audioFile = null;
+  try {
+    audioFile = await tts.generateSpeech(replyText, 'reply');
+  } catch (err) {
+    console.error('[handleUtterance] TTS error:', err.message);
+  }
+
   // Redirect call to TwiML that speaks the reply
-  const replyUrl =
+  let replyUrl =
     `${BASE_URL}/play-reply` +
     `?callSid=${encodeURIComponent(callSid)}` +
     `&text=${encodeURIComponent(replyText)}`;
+  if (audioFile) replyUrl += `&audio=${encodeURIComponent(audioFile)}`;
 
   try {
     await redirectCall(callSid, replyUrl);
@@ -273,8 +299,19 @@ async function handleUtterance(callSid, utterance) {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`\n✅ AI Receptionist running on port ${PORT}`);
   console.log(`   Dashboard:      ${BASE_URL}`);
-  console.log(`   Twilio webhook: ${BASE_URL}/incoming-call  (HTTP POST)\n`);
+  console.log(`   Twilio webhook: ${BASE_URL}/incoming-call  (HTTP POST)`);
+
+  if (tts.isEnabled()) {
+    try {
+      greetingAudioFile = await tts.generateSpeech(GREETING_TEXT, 'greeting');
+      console.log(`   Voice:          ElevenLabs (greeting ${greetingAudioFile ? 'ready' : 'fallback→Polly'})\n`);
+    } catch (err) {
+      console.error('   Voice:          ElevenLabs greeting failed, using Polly —', err.message, '\n');
+    }
+  } else {
+    console.log(`   Voice:          Polly Neural (set ELEVENLABS_API_KEY for human voice)\n`);
+  }
 });
