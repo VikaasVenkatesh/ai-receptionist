@@ -78,4 +78,9 @@ function clearConversation(callSid) {
   console.log(`[LLM] Cleared conversation for ${callSid}`);
 }
 
-module.exports = { processUtterance, appendSystemNote, clearConversation };
+/** Returns the conversation history for a call (read it before clearConversation). */
+function getConversation(callSid) {
+  return conversations.get(callSid) || [];
+}
+
+module.exports = { processUtterance, appendSystemNote, clearConversation, getConversation };

@@ -8,10 +8,12 @@ const path = require('path');
 
 const { incomingCallTwiml, replyTwiml, replyTwimlAudio, redirectCall, GREETING_TEXT } = require('./services/twilio');
 const { createDeepgramStream } = require('./services/deepgram');
-const { processUtterance, appendSystemNote, clearConversation } = require('./services/llm');
+const { processUtterance, appendSystemNote, clearConversation, getConversation } = require('./services/llm');
 const { bookAppointment } = require('./services/calendar');
 const tts = require('./services/tts');
 const bus = require('./services/eventBus');
+const { setMeta, getMeta, recordBooking, clearMeta } = require('./services/call-meta');
+const { syncCallToGHL } = require('./services/orchestrator');
 
 const app = express();
 expressWs(app);
@@ -118,6 +120,15 @@ bus.on('call:booking',    (p) => broadcast('call:booking',    p));
 bus.on('call:ended',      (p) => broadcast('call:ended',      p));
 bus.on('call:error',      (p) => broadcast('call:error',      p));
 
+// Persist per-call metadata so the end-of-call GHL sync has the caller's number,
+// start time, and any bookings available after the live events have passed.
+bus.on('call:started', ({ callSid, from, to }) => {
+  setMeta(callSid, { from, to, startedAt: Date.now() });
+});
+bus.on('call:booking', ({ callSid, details, success }) => {
+  recordBooking(callSid, { ...details, success });
+});
+
 // Sweep stale calls: if a "live" call has had no activity for STALE_CALL_MS,
 // the real end-of-call signal never arrived — close it out so the dashboard
 // clears instead of showing a phantom call that ticks up forever.
@@ -126,8 +137,20 @@ setInterval(() => {
   for (const [sid, lastTs] of activeCalls) {
     if (now - lastTs > STALE_CALL_MS) {
       console.log(`[Sweeper] Auto-ending stale call ${sid} (no activity for ${Math.round((now - lastTs) / 1000)}s)`);
+      // Read state before clearing so the CRM sync still has it. The orchestrator
+      // is idempotent per callSid, so if Twilio's callback later arrives too,
+      // it won't double-sync.
+      const conversation = getConversation(sid);
+      const meta = getMeta(sid);
       bus.emit('call:ended', { callSid: sid, status: 'timeout' });
+      if (conversation.length > 0) {
+        syncCallToGHL({ callSid: sid, status: 'timeout', conversation, meta })
+          .catch((err) => console.error('[Sweeper] GHL sync error:', err.message));
+      }
       clearConversation(sid);
+      clearMeta(sid);
+      lastUtterance.delete(sid);
+      callQueues.delete(sid);
     }
   }
 }, 30 * 1000).unref();
@@ -188,8 +211,23 @@ app.post('/call-status', (req, res) => {
   const { CallSid, CallStatus } = req.body;
   console.log(`[Server] Call ${CallSid} status: ${CallStatus}`);
   if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(CallStatus)) {
+    // Read call state BEFORE we clear it — the orchestrator needs the transcript
+    // and metadata, and these references stay valid even after the maps are cleared.
+    const conversation = getConversation(CallSid);
+    const meta = getMeta(CallSid);
+
     bus.emit('call:ended', { callSid: CallSid, status: CallStatus });
+
+    // Fire-and-forget CRM sync — only for completed calls that actually had a
+    // conversation. Must not block Twilio's expected fast 2xx, and must never
+    // throw into the response path.
+    if (CallStatus === 'completed' && conversation.length > 0) {
+      syncCallToGHL({ callSid: CallSid, status: CallStatus, conversation, meta })
+        .catch((err) => console.error('[Server] GHL sync error:', err.message));
+    }
+
     clearConversation(CallSid);
+    clearMeta(CallSid);
     lastUtterance.delete(CallSid);
     callQueues.delete(CallSid);
   }
