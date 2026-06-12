@@ -114,7 +114,9 @@ async function createOpportunity({ contactId, pipelineId, stageId, name, monetar
     status,
     monetaryValue,
   };
-  const res = await fetch(`${BASE}/opportunities`, {
+  // NOTE: GHL requires the trailing slash here — POST /opportunities (no slash)
+  // returns 404, while /opportunities/ works. Verified against the live API.
+  const res = await fetch(`${BASE}/opportunities/`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify(body),
