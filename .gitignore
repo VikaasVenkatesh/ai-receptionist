@@ -6,3 +6,4 @@ audio/*.wav
 audio/*.mulaw
 *.log
 .DS_Store
+data/

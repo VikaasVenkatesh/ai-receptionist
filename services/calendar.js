@@ -111,7 +111,7 @@ async function bookAppointment({ name, date, time, duration, reason }) {
       };
     }
 
-    await calendar.events.insert({
+    const inserted = await calendar.events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
       requestBody: {
         summary: `Appointment – ${name}`,
@@ -133,6 +133,10 @@ async function bookAppointment({ name, date, time, duration, reason }) {
     return {
       success: true,
       message: `Your appointment has been confirmed for ${friendly}.`,
+      // ISO 8601 instants for downstream consumers (e.g. the GHL appointment dual-write)
+      startTime: startISO,
+      endTime: endISO,
+      googleEventId: inserted.data.id,
     };
   } catch (err) {
     console.error('[Calendar] Booking error:', err.message);

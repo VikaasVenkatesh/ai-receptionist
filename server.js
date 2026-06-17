@@ -14,6 +14,7 @@ const tts = require('./services/tts');
 const bus = require('./services/eventBus');
 const { setMeta, getMeta, recordBooking, clearMeta } = require('./services/call-meta');
 const { syncCallToGHL } = require('./services/orchestrator');
+const { readFailedSync } = require('./services/failed-sync-ledger');
 
 const app = express();
 expressWs(app);
@@ -210,28 +211,65 @@ app.post('/play-reply', (req, res) => {
 app.post('/call-status', (req, res) => {
   const { CallSid, CallStatus } = req.body;
   console.log(`[Server] Call ${CallSid} status: ${CallStatus}`);
+
   if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(CallStatus)) {
     // Read call state BEFORE we clear it — the orchestrator needs the transcript
-    // and metadata, and these references stay valid even after the maps are cleared.
+    // and metadata. References stay valid even after the maps are cleared.
     const conversation = getConversation(CallSid);
     const meta = getMeta(CallSid);
 
     bus.emit('call:ended', { callSid: CallSid, status: CallStatus });
 
-    // Fire-and-forget CRM sync — only for completed calls that actually had a
-    // conversation. Must not block Twilio's expected fast 2xx, and must never
-    // throw into the response path.
     if (CallStatus === 'completed' && conversation.length > 0) {
-      syncCallToGHL({ callSid: CallSid, status: CallStatus, conversation, meta })
-        .catch((err) => console.error('[Server] GHL sync error:', err.message));
-    }
+      // Grace period: Deepgram may still have a trailing final transcript that
+      // hasn't been appended when Twilio fires this callback. Wait briefly, then
+      // re-read so the analysis sees the complete conversation. We've already
+      // answered 204, so the delayed cleanup doesn't affect Twilio.
+      setTimeout(() => {
+        const finalConversation = getConversation(CallSid);
+        const convForSync = finalConversation.length > conversation.length ? finalConversation : conversation;
+        syncCallToGHL({ callSid: CallSid, status: CallStatus, conversation: convForSync, meta })
+          .catch((err) => console.error('[Server] GHL sync error:', err.message));
 
-    clearConversation(CallSid);
-    clearMeta(CallSid);
-    lastUtterance.delete(CallSid);
-    callQueues.delete(CallSid);
+        clearConversation(CallSid);
+        clearMeta(CallSid);
+        lastUtterance.delete(CallSid);
+        callQueues.delete(CallSid);
+      }, 1500);
+    } else {
+      // Non-completed statuses: clear immediately, no sync.
+      clearConversation(CallSid);
+      clearMeta(CallSid);
+      lastUtterance.delete(CallSid);
+      callQueues.delete(CallSid);
+    }
   }
   res.sendStatus(204);
+});
+
+/**
+ * Admin: manually re-trigger a failed GHL sync from the ledger.
+ * Protected by the ADMIN_SECRET header. Best-effort (ledger is ephemeral on Railway).
+ */
+app.post('/admin/retry-sync/:callSid', async (req, res) => {
+  if (!process.env.ADMIN_SECRET || req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+    return res.sendStatus(403);
+  }
+  const { callSid } = req.params;
+  const failed = await readFailedSync(callSid);
+  if (!failed) return res.status(404).json({ error: 'No failed sync found for callSid' });
+
+  try {
+    await syncCallToGHL({
+      callSid,
+      status: 'completed',
+      conversation: failed.payload?.conversation || [],
+      meta: failed.payload?.meta || {},
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─── WebSocket Media Stream ───────────────────────────────────────────────────
@@ -388,7 +426,16 @@ async function handleUtterance(callSid, utterance) {
       try {
         const calResult = await bookAppointment(booking);
         replyText = (replyText + ' ' + calResult.message).trim();
-        bus.emit('call:booking', { callSid, details: booking, success: calResult.success, message: calResult.message });
+        // Enrich the booking details with the ISO 8601 start/end (and Google
+        // event id) so the end-of-call GHL appointment dual-write has a real
+        // time window to anchor reminders to.
+        const details = {
+          ...booking,
+          startTime: calResult.startTime,
+          endTime: calResult.endTime,
+          googleEventId: calResult.googleEventId,
+        };
+        bus.emit('call:booking', { callSid, details, success: calResult.success, message: calResult.message });
         if (calResult.success) {
           appendSystemNote(callSid, `Appointment booked: ${JSON.stringify(booking)}`);
         } else {
