@@ -125,16 +125,20 @@ async function syncCallToGHL({ callSid, status, conversation, meta }) {
       return;
     }
 
+    const booking = getLatestSuccessfulBooking(meta);
+    // Email is collected during booking, so prefer the confirmed booking email
+    // over whatever the transcript analysis inferred.
+    const contactEmail = booking?.email || analysis.email || null;
+
     // 2. Upsert contact
     const contactId = await ghl.upsertContact({
       phone: validatedPhone,
       firstName: analysis.firstName,
       lastName: analysis.lastName,
-      email: analysis.email,
+      email: contactEmail,
     });
 
     // 3. Set custom fields
-    const booking = getLatestSuccessfulBooking(meta);
     const fieldsToSet = {
       [process.env.GHL_FIELD_ID_AI_CALL_INTENT]: analysis.intent || '',
       [process.env.GHL_FIELD_ID_AI_CALL_OUTCOME]: analysis.outcome,

@@ -87,10 +87,10 @@ async function isSlotAvailable(startISO, endISO) {
 /**
  * Books an appointment on Google Calendar.
  *
- * @param {{ name: string, date: string, time: string, duration: number, reason: string }} details
+ * @param {{ name: string, email: string, date: string, time: string, duration: number, reason: string }} details
  * @returns {{ success: boolean, message: string }}
  */
-async function bookAppointment({ name, date, time, duration, reason }) {
+async function bookAppointment({ name, email, date, time, duration, reason }) {
   try {
     const calendar = getCalendar();
     const durationMins = duration || CALENDAR_CONFIG.defaultDurationMinutes;
@@ -111,11 +111,16 @@ async function bookAppointment({ name, date, time, duration, reason }) {
       };
     }
 
+    const description =
+      `Reason: ${reason}\n` +
+      (email ? `Email: ${email}\n` : '') +
+      `Booked by AI Receptionist`;
+
     const inserted = await calendar.events.insert({
       calendarId: process.env.GOOGLE_CALENDAR_ID,
       requestBody: {
         summary: `Appointment – ${name}`,
-        description: `Reason: ${reason}\nBooked by AI Receptionist`,
+        description,
         start: { dateTime: startISO, timeZone: CALENDAR_CONFIG.timezone },
         end: { dateTime: endISO, timeZone: CALENDAR_CONFIG.timezone },
       },
