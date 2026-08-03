@@ -113,6 +113,27 @@ async function deepgramAura(text) {
  * "reply-ab12cd34.mp3") to be served from /audio. Returns null on any failure
  * so the caller can fall back to Polly.
  *
+ * Rewrites text into a form the TTS voice pronounces correctly. Only the audio
+ * uses this — the dashboard/transcripts keep the original spelling.
+ */
+function normalizeForSpeech(text) {
+  let t = text;
+
+  // "Dr." gets clipped/garbled by the voice ("octer") — say the whole word.
+  t = t.replace(/\bDr\.?(?=\s)/g, 'Doctor');
+
+  // "Han" comes out with a flat American "a" (rhyming with "can"); the phonetic
+  // spelling "Hahn" produces the correct pronunciation (as in Han dynasty).
+  t = t.replace(/\bHan\b/g, 'Hahn');
+
+  // Spelled-out letter runs ("J-O-H-N" or "J O H N") get slurred together.
+  // Commas force the voice to pause, making each letter discrete: "J, O, H, N".
+  t = t.replace(/\b(?:[A-Za-z][-\s]){2,}[A-Za-z]\b/g, (m) => m.split(/[-\s]/).join(', '));
+
+  return t;
+}
+
+/**
  * @param {string} text
  * @param {string} [prefix] - filename prefix, e.g. "reply" or "greeting"
  * @returns {Promise<string|null>}
@@ -120,6 +141,9 @@ async function deepgramAura(text) {
 async function generateSpeech(text, prefix = 'reply') {
   const provider = activeProvider();
   if (!provider || !text || !text.trim()) return null;
+
+  // Normalize before hashing so the cache keys follow the spoken form.
+  text = normalizeForSpeech(text);
 
   ensureAudioDir();
   cleanupOldFiles();
