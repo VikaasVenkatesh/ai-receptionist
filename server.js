@@ -15,6 +15,8 @@ const bus = require('./services/eventBus');
 const { setMeta, getMeta, recordBooking, clearMeta } = require('./services/call-meta');
 const { syncCallToGHL } = require('./services/orchestrator');
 const { readFailedSync } = require('./services/failed-sync-ledger');
+const email = require('./services/email');
+const { startReminderLoop } = require('./services/reminders');
 
 const app = express();
 expressWs(app);
@@ -437,6 +439,10 @@ async function handleUtterance(callSid, utterance) {
         };
         bus.emit('call:booking', { callSid, details, success: calResult.success, message: calResult.message });
         if (calResult.success) {
+          // Fire-and-forget: a slow or failed email must never stall the call.
+          email.sendBookingConfirmation(details)
+            .then((id) => id && console.log(`[Email] Confirmation sent to ${details.email}`))
+            .catch((err) => console.error('[Email] Confirmation failed:', err.message));
           appendSystemNote(callSid, `Appointment booked: ${JSON.stringify(booking)}`);
         } else {
           recentBookings.delete(key); // booking failed — allow a genuine retry
@@ -476,6 +482,8 @@ async function handleUtterance(callSid, utterance) {
 
 app.listen(PORT, async () => {
   console.log(`\n✅ AI Receptionist running on port ${PORT}`);
+  console.log(`   Patient email:  ${email.isEnabled() ? `on (from ${process.env.GMAIL_SENDER})` : 'off (set GMAIL_* vars)'}`);
+  startReminderLoop();
   console.log(`   Dashboard:      ${BASE_URL}`);
   console.log(`   Twilio webhook: ${BASE_URL}/incoming-call  (HTTP POST)`);
 

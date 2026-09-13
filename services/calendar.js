@@ -123,6 +123,15 @@ async function bookAppointment({ name, email, date, time, duration, reason }) {
         description,
         start: { dateTime: startISO, timeZone: CALENDAR_CONFIG.timezone },
         end: { dateTime: endISO, timeZone: CALENDAR_CONFIG.timezone },
+        // Structured patient data for the reminder job; the reminderSent flag
+        // lives on the event itself so it survives server restarts.
+        extendedProperties: {
+          private: {
+            patientName: name || '',
+            patientEmail: email || '',
+            reason: reason || '',
+          },
+        },
       },
     });
 
@@ -152,4 +161,31 @@ async function bookAppointment({ name, email, date, time, duration, reason }) {
   }
 }
 
-module.exports = { bookAppointment };
+/** Bot-booked events (with a patient email) starting between now and `hoursAhead`. */
+async function listUpcomingAppointments(hoursAhead = 24) {
+  const calendar = getCalendar();
+  const res = await calendar.events.list({
+    calendarId: process.env.GOOGLE_CALENDAR_ID,
+    timeMin: new Date().toISOString(),
+    timeMax: new Date(Date.now() + hoursAhead * 3600 * 1000).toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 250,
+  });
+  return (res.data.items ?? []).filter((e) => e.extendedProperties?.private?.patientEmail);
+}
+
+async function markReminderSent(event) {
+  const calendar = getCalendar();
+  await calendar.events.patch({
+    calendarId: process.env.GOOGLE_CALENDAR_ID,
+    eventId: event.id,
+    requestBody: {
+      extendedProperties: {
+        private: { ...(event.extendedProperties?.private || {}), reminderSent: 'true' },
+      },
+    },
+  });
+}
+
+module.exports = { bookAppointment, listUpcomingAppointments, markReminderSent };
