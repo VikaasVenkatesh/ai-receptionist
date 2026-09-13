@@ -165,6 +165,10 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+});
+
 // Exposes the Twilio number to the dashboard
 app.get('/phone-number', (req, res) => {
   res.json({ number: process.env.TWILIO_PHONE_NUMBER || null });
