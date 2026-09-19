@@ -56,7 +56,8 @@ function cleanupOldFiles() {
     const now = Date.now();
     for (const f of fs.readdirSync(AUDIO_DIR)) {
       if (!f.endsWith('.mp3')) continue;
-      if (f.startsWith('greeting-')) continue; // keep the long-lived greeting clip
+      // Keep the long-lived clips: the greeting and the website demo lines.
+      if (f.startsWith('greeting-') || f.startsWith('demo-')) continue;
       const full = path.join(AUDIO_DIR, f);
       try {
         if (now - fs.statSync(full).mtimeMs > FILE_TTL_MS) fs.unlinkSync(full);

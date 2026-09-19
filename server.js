@@ -165,6 +165,42 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// ─── Website demo (embeddable clickthrough) ──────────────────────────────────
+
+// The AI's spoken lines in public/demo.html, voiced with the same TTS the real
+// receptionist uses. Generated once at startup so the page has real audio.
+const DEMO_LINES = {
+  l1: "Hi, thanks for calling Doctor Hahn Kim's office. How can I help you today?",
+  l2: "I'm sorry to hear that. I can get you in. What day and time work best? We're open Tuesday through Friday, nine to six, and Saturday mornings.",
+  l3: 'Thursday, September 24th at 2:00 PM is open. Can I get your full name?',
+  l4: 'Thanks, John. And your email address for the confirmation?',
+  l5: 'Let me read that back: j, o, h, n, dot, s, m, i, t, h, at gmail dot com. Did I get that right?',
+  l6: "Perfect. You're booked for Thursday, September 24th at 2:00 PM for lower back pain, and the confirmation is on its way. See you then!",
+};
+const demoAudio = {}; // line id -> public /audio URL
+
+async function generateDemoAudio() {
+  if (!tts.isEnabled()) return;
+  for (const [id, text] of Object.entries(DEMO_LINES)) {
+    try {
+      const file = await tts.generateSpeech(text, 'demo');
+      if (file) demoAudio[id] = `${BASE_URL}/audio/${encodeURIComponent(file)}`;
+    } catch (err) {
+      console.error(`[Demo] Audio failed for ${id}:`, err.message);
+    }
+  }
+  console.log(`   Demo audio:     ${Object.keys(demoAudio).length}/${Object.keys(DEMO_LINES).length} lines ready`);
+}
+
+app.get('/demo', (req, res) => {
+  // Embeddable on the marketing site, so don't send X-Frame-Options here.
+  res.sendFile(path.join(__dirname, 'public', 'demo.html'));
+});
+
+app.get('/demo-manifest', (req, res) => {
+  res.json({ audio: demoAudio });
+});
+
 app.get('/privacy', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
 });
@@ -488,6 +524,7 @@ app.listen(PORT, async () => {
   console.log(`\n✅ AI Receptionist running on port ${PORT}`);
   console.log(`   Patient email:  ${email.isEnabled() ? `on (from ${process.env.GMAIL_SENDER})` : 'off (set GMAIL_* vars)'}`);
   startReminderLoop();
+  generateDemoAudio();
   console.log(`   Dashboard:      ${BASE_URL}`);
   console.log(`   Twilio webhook: ${BASE_URL}/incoming-call  (HTTP POST)`);
 
