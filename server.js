@@ -5,6 +5,7 @@ require('dotenv').config();
 const express = require('express');
 const expressWs = require('express-ws');
 const path = require('path');
+const fs = require('fs');
 
 const { incomingCallTwiml, replyTwiml, replyTwimlAudio, redirectCall, GREETING_TEXT } = require('./services/twilio');
 const { createDeepgramStream } = require('./services/deepgram');
@@ -204,8 +205,8 @@ app.get('/demo-manifest', (req, res) => {
 // ─── DJ Tanveer demo (second brand, same deployment) ─────────────────────────
 
 const DJ_DEMO_LINES = {
-  l1: 'Hi, thanks for calling D J Tanveer. How can I help you today?',
-  l2: "Congratulations! Tanveer would love to hear about it. The best next step is a quick consultation call. What day and time work for you? We're available Monday through Saturday, ten to eight.",
+  l1: 'Hi, thanks for calling DJ Tonveer. How can I help you today?',
+  l2: "Congratulations! Tonveer would love to hear about it. The best next step is a quick consultation call. What day and time work for you? We're available Monday through Saturday, ten to eight.",
   l3: 'Thursday, October 15th at 2:00 PM is open. Can I get your full name?',
   l4: 'Thanks, Priya. And your email address for the confirmation?',
   l5: 'Let me read that back: p, r, i, y, a, dot, s, h, a, r, m, a, at gmail dot com. Did I get that right?',
@@ -213,9 +214,18 @@ const DJ_DEMO_LINES = {
 };
 const djDemoAudio = {};
 
+// The DJ demo uses ElevenLabs clips committed under public/demo-audio/dj.
+// They're pre-rendered because ElevenLabs' free tier refuses API calls from
+// datacenter IPs, so the server can't generate them at runtime. Any line
+// without a file falls back to the Aura voice.
 async function generateDjDemoAudio() {
-  if (!tts.isEnabled()) return;
   for (const [id, text] of Object.entries(DJ_DEMO_LINES)) {
+    const clip = path.join(__dirname, 'public', 'demo-audio', 'dj', `${id}.mp3`);
+    if (fs.existsSync(clip)) {
+      djDemoAudio[id] = `${BASE_URL}/demo-audio/dj/${id}.mp3`;
+      continue;
+    }
+    if (!tts.isEnabled()) continue;
     try {
       const file = await tts.generateSpeech(text, 'demo');
       if (file) djDemoAudio[id] = `${BASE_URL}/audio/${encodeURIComponent(file)}`;
@@ -223,6 +233,7 @@ async function generateDjDemoAudio() {
       console.error(`[DJ demo] Audio failed for ${id}:`, err.message);
     }
   }
+  console.log(`   DJ demo audio:  ${Object.keys(djDemoAudio).length}/${Object.keys(DJ_DEMO_LINES).length} lines ready`);
 }
 
 app.get('/demo/dj', (req, res) => {

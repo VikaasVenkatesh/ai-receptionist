@@ -127,6 +127,9 @@ function normalizeForSpeech(text) {
   // spelling "Hahn" produces the correct pronunciation (as in Han dynasty).
   t = t.replace(/\bHan\b/g, 'Hahn');
 
+  // "Tanveer" comes out as "TAN-veer"; the phonetic spelling gives "ton-veer".
+  t = t.replace(/\bTanveer\b/g, 'Tonveer');
+
   // Spelled-out letter runs ("J-O-H-N" or "J O H N") get slurred together.
   // Commas force the voice to pause, making each letter discrete: "J, O, H, N".
   t = t.replace(/\b(?:[A-Za-z][-\s]){2,}[A-Za-z]\b/g, (m) => m.split(/[-\s]/).join(', '));
