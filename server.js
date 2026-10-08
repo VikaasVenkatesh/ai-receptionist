@@ -212,12 +212,12 @@ app.get('/demo-manifest', (req, res) => {
 // ─── DJ Tanveer demo (second brand, same deployment) ─────────────────────────
 
 const DJ_DEMO_LINES = {
-  l1: 'Hi, thanks for calling DJ Tonveer. How can I help you today?',
-  l2: "Congratulations! Tonveer would love to hear about it. The best next step is a quick consultation call. What day and time work for you? We're available Monday through Saturday, ten to eight.",
-  l3: 'Thursday, October 15th at 2:00 PM is open. Can I get your full name?',
-  l4: 'Thanks, Priya. And your email address for the confirmation?',
-  l5: 'Let me read that back: p, r, i, y, a, dot, s, h, a, r, m, a, at gmail dot com. Did I get that right?',
-  l6: 'Perfect. Your consultation is set for Thursday, October 15th at 2:00 PM to plan the wedding reception, and the confirmation is on its way. Talk soon!',
+  l1: "Hi there, thanks so much for calling DJ Tonveer! How can I help you today?",
+  l2: "Oh, congratulations! Tonveer would love to hear all about it. The best next step is a quick consultation call. What day and time work for you? We're around Monday through Saturday, ten to eight.",
+  l3: "Thursday, October 15th at 2:00 PM is wide open! Can I grab your full name?",
+  l4: "Thanks so much, Priya! And what's the best email for your confirmation?",
+  l5: "Perfect, let me read that back: P. R. I. Y. A. dot, S. H. A. R. M. A. at gmail dot com. Did I get that right?",
+  l6: "Wonderful! You're all set for Thursday, October 15th at 2:00 PM to plan your wedding reception, and your confirmation is on its way. Talk soon!",
 };
 const djDemoAudio = {};
 
