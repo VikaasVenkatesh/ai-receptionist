@@ -10,7 +10,7 @@ const fs = require('fs');
 const { incomingCallTwiml, replyTwiml, replyTwimlAudio, redirectCall, GREETING_TEXT } = require('./services/twilio');
 const { createDeepgramStream } = require('./services/deepgram');
 const { processUtterance, appendSystemNote, clearConversation, getConversation } = require('./services/llm');
-const { bookAppointment, nextWeekdayAt, createDemoEvent } = require('./services/calendar');
+const { bookAppointment, nextWeekdayAt, createDemoEvent, zonedTimeToUtc } = require('./services/calendar');
 const tts = require('./services/tts');
 const bus = require('./services/eventBus');
 const { setMeta, getMeta, recordBooking, clearMeta } = require('./services/call-meta');
@@ -266,8 +266,11 @@ app.post('/demo/dj/book', async (req, res) => {
   recent.push(now);
   djDemoHits.set(ip, recent);
 
-  // Next Thursday at 2:00 PM Pacific, matching the scripted call.
-  const start = nextWeekdayAt(4, 14, 0);
+  // The scripted call (and the recorded audio) says Thursday, October 15th at
+  // 2:00 PM, so the booking must land on that exact slot. Once that date is in
+  // the past, fall back to the next Thursday so the demo keeps working.
+  const SCRIPTED = zonedTimeToUtc('2026-10-15', '14:00', 'America/Los_Angeles');
+  const start = SCRIPTED.getTime() > Date.now() ? SCRIPTED : nextWeekdayAt(4, 14, 0);
   const end = new Date(start.getTime() + 30 * 60 * 1000);
 
   try {

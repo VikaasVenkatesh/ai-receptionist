@@ -223,5 +223,5 @@ async function createDemoEvent({ calendarId, summary, description, start, end })
 
 module.exports = {
   bookAppointment, listUpcomingAppointments, markReminderSent,
-  nextWeekdayAt, createDemoEvent,
+  nextWeekdayAt, createDemoEvent, zonedTimeToUtc,
 };
