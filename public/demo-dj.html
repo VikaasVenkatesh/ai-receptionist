@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DJ Tanveer AI Receptionist — Live Demo</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #111827; --muted: #6b7280;
+    --line: #e5e7eb; --blue: #2563eb; --blue-soft: #eff6ff;
+    --green: #059669; --green-soft: #ecfdf5; --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 20px; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .title { font-size: 18px; font-weight: 700; margin: 0; }
+  .sub { font-size: 13px; color: var(--muted); margin: 2px 0 0; }
+  .btn { border: 0; border-radius: 999px; padding: 11px 20px; font-size: 14px; font-weight: 600;
+    cursor: pointer; background: var(--blue); color: #fff; }
+  .btn:hover { background: #1d4ed8; }
+  .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .panel-head { display: flex; align-items: center; gap: 9px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .panel-head h2 { font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 0; font-weight: 700; }
+  .status { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
+  .dot.live { background: var(--green); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+
+  .transcript { height: 420px; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .row { display: flex; gap: 10px; align-items: flex-start; animation: rise .32s ease both; }
+  .row.caller { flex-direction: row-reverse; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+  .who { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 30px; display: grid; place-items: center; font-size: 14px; }
+  .who.ai { background: var(--blue-soft); }
+  .who.caller { background: #f1f5f9; }
+  .bubble { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.5; }
+  .row.ai .bubble { background: var(--blue-soft); border-top-left-radius: 4px; }
+  .row.caller .bubble { background: #f1f5f9; border-top-right-radius: 4px; }
+  .empty { margin: auto; text-align: center; color: var(--muted); font-size: 14px; max-width: 260px; }
+  .typing span { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%;
+    background: #93a3b8; animation: blink 1.2s infinite; }
+  .typing span:nth-child(2) { animation-delay: .2s } .typing span:nth-child(3) { animation-delay: .4s }
+  @keyframes blink { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+
+  .events { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-height: 180px; }
+  .event { border: 1px solid var(--line); border-radius: 11px; padding: 11px 13px; font-size: 13.5px;
+    animation: rise .3s ease both; background: #fff; }
+  .event .lbl { font-weight: 700; display: flex; align-items: center; gap: 7px; }
+  .event .det { color: var(--muted); margin-top: 3px; line-height: 1.5; }
+  .event.ok { border-color: #a7f3d0; background: var(--green-soft); }
+  .event.ok .lbl { color: #047857; }
+  .hint { color: var(--muted); font-size: 13px; margin: 14px 16px 0; }
+  .foot { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .tag { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1 class="title">AI Receptionist — live demo</h1>
+      <p class="sub">A real inquiry call, start to finish. Sound on to hear the actual voice.</p>
+    </div>
+    <div>
+      <button class="btn ghost" id="skip" disabled>Skip ahead</button>
+      <button class="btn" id="start">Start the call</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Call transcript</h2>
+        <div class="status"><span class="dot" id="dot"></span><span id="statusText">Not started</span></div>
+      </div>
+      <div class="transcript" id="transcript">
+        <p class="empty">Press <strong>Start the call</strong> to watch the receptionist answer, book a consultation and confirm it.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>What happens behind the call</h2></div>
+      <div class="events" id="events">
+        <p class="hint" id="eventsHint">Actions appear here as the receptionist works: checking the calendar, booking, and sending the confirmation.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="foot">
+    <button class="btn ghost" id="replay" style="display:none">Replay demo</button>
+    <button class="btn" id="book" style="display:none">Add this booking to the real calendar</button>
+    <span class="tag" id="bookMsg"></span>
+    <span class="tag">Answers 24/7 · books straight into the booking calendar · emails the patient</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var SCRIPT = [
+    { who: 'ai', id: 'l1', text: "Hi, thanks for calling DJ Tanveer. How can I help you today?" },
+    { who: 'caller', text: "Hi! We're getting married in June and we still need a DJ for the reception." },
+    { who: 'ai', id: 'l2', text: "Congratulations! Tanveer would love to hear about it. The best next step is a quick consultation call. What day and time work for you? We're available Monday through Saturday, ten to eight." },
+    { who: 'caller', text: "Is Thursday at two any good?" },
+    { event: { lbl: 'Checking the calendar', det: 'Looking for conflicts at Thursday, October 15th at 2:00 PM.' } },
+    { who: 'ai', id: 'l3', text: "Thursday, October 15th at 2:00 PM is open. Can I get your full name?" },
+    { who: 'caller', text: "Priya Sharma." },
+    { who: 'ai', id: 'l4', text: "Thanks, Priya. And your email address for the confirmation?" },
+    { who: 'caller', text: "priya.sharma@gmail.com" },
+    { who: 'ai', id: 'l5', text: "Let me read that back: p, r, i, y, a, dot, s, h, a, r, m, a, at gmail dot com. Did I get that right?" },
+    { who: 'caller', text: "That's right." },
+    { event: { ok: true, lbl: '\u2713 Consultation booked', det: 'Priya Sharma \u2014 Thursday, October 15th at 2:00 PM. Added to the booking calendar.' } },
+    { event: { ok: true, lbl: '\u2713 Confirmation email sent', det: 'Sent to priya.sharma@gmail.com, with a reminder scheduled for the day before.' } },
+    { who: 'ai', id: 'l6', text: "Perfect. Your consultation is set for Thursday, October 15th at 2:00 PM to plan the wedding reception, and the confirmation is on its way. Talk soon!" },
+    { event: { ok: true, lbl: '\u2713 Call logged', det: 'Summary, outcome and full transcript saved to the business records.' } }
+  ];
+
+  var elT = document.getElementById('transcript'), elE = document.getElementById('events');
+  var elStart = document.getElementById('start'), elSkip = document.getElementById('skip');
+  var elReplay = document.getElementById('replay'), elDot = document.getElementById('dot');
+  var elStatus = document.getElementById('statusText'), elHint = document.getElementById('eventsHint');
+
+  var audio = {}, timer = null, i = 0, running = false;
+  var player = new Audio();
+
+  fetch('/demo/dj/manifest').then(function (r) { return r.json(); })
+    .then(function (m) { audio = m.audio || {}; }).catch(function () {});
+
+  function wait(ms) { return new Promise(function (res) { timer = setTimeout(res, ms); }); }
+
+  function addRow(who, text) {
+    var row = document.createElement('div');
+    row.className = 'row ' + who;
+    row.innerHTML = '<div class="who ' + who + '">' + (who === 'ai' ? '💬' : '🧑') + '</div>' +
+                    '<div class="bubble"></div>';
+    row.querySelector('.bubble').textContent = text;
+    elT.appendChild(row);
+    elT.scrollTop = elT.scrollHeight;
+  }
+
+  function addTyping(who) {
+    var row = document.createElement('div');
+    row.className = 'row ' + who;
+    row.id = 'typing';
+    row.innerHTML = '<div class="who ' + who + '">' + (who === 'ai' ? '💬' : '🧑') + '</div>' +
+      '<div class="bubble typing"><span></span><span></span><span></span></div>';
+    elT.appendChild(row);
+    elT.scrollTop = elT.scrollHeight;
+  }
+  function clearTyping() { var t = document.getElementById('typing'); if (t) t.remove(); }
+
+  function addEvent(e) {
+    if (elHint) { elHint.remove(); elHint = null; }
+    var d = document.createElement('div');
+    d.className = 'event' + (e.ok ? ' ok' : '');
+    d.innerHTML = '<div class="lbl"></div><div class="det"></div>';
+    d.querySelector('.lbl').textContent = e.lbl;
+    d.querySelector('.det').textContent = e.det;
+    elE.appendChild(d);
+  }
+
+  function playLine(id) {
+    return new Promise(function (resolve) {
+      var src = audio[id];
+      if (!src) return resolve(false);
+      player.src = src;
+      player.onended = function () { resolve(true); };
+      player.onerror = function () { resolve(false); };
+      var p = player.play();
+      if (p && p.catch) p.catch(function () { resolve(false); });
+    });
+  }
+
+  async function step() {
+    if (i >= SCRIPT.length) return finish();
+    var s = SCRIPT[i++];
+
+    if (s.event) { addEvent(s.event); await wait(900); return step(); }
+
+    addTyping(s.who);
+    await wait(s.who === 'ai' ? 500 : 800);
+    clearTyping();
+    addRow(s.who, s.text);
+
+    if (s.who === 'ai') {
+      var played = await playLine(s.id);
+      if (!played) await wait(Math.min(5200, 950 + s.text.length * 42));
+      else await wait(250);
+    } else {
+      await wait(Math.min(2600, 700 + s.text.length * 28));
+    }
+    return step();
+  }
+
+  function finish() {
+    running = false;
+    elDot.className = 'dot';
+    elStatus.textContent = 'Call ended';
+    elSkip.disabled = true;
+    elReplay.style.display = 'inline-block';
+    elBook.style.display = 'inline-block';
+  }
+
+  function reset() {
+    clearTimeout(timer); player.pause(); i = 0;
+    elT.innerHTML = ''; elE.innerHTML = '';
+    elReplay.style.display = 'none';
+    elBook.style.display = 'none'; elBook.disabled = false; elBookMsg.textContent = '';
+  }
+
+  function begin() {
+    if (running) return;
+    reset(); running = true;
+    elStart.disabled = true; elSkip.disabled = false;
+    elDot.className = 'dot live'; elStatus.textContent = 'On a call';
+    step();
+  }
+
+  var elBook = document.getElementById('book'), elBookMsg = document.getElementById('bookMsg');
+  elBook.addEventListener('click', async function () {
+    elBook.disabled = true; elBookMsg.textContent = 'Adding to Google Calendar…';
+    try {
+      var r = await fetch('/demo/dj/book', { method: 'POST' });
+      var d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not add the booking');
+      elBookMsg.innerHTML = '\u2713 Added to the calendar. ' +
+        (d.link ? '<a href="' + d.link + '" target="_blank" rel="noopener">Open in Google Calendar</a>' : '');
+    } catch (err) {
+      elBook.disabled = false;
+      elBookMsg.textContent = err.message;
+    }
+  });
+
+  elStart.addEventListener('click', begin);
+  elReplay.addEventListener('click', function () { elStart.disabled = false; begin(); });
+  elSkip.addEventListener('click', function () {
+    clearTimeout(timer); player.pause();
+    clearTyping();
+    while (i < SCRIPT.length) {
+      var s = SCRIPT[i++];
+      if (s.event) addEvent(s.event); else addRow(s.who, s.text);
+    }
+    finish();
+  });
+})();
+</script>
+</body>
+</html>

@@ -188,4 +188,40 @@ async function markReminderSent(event) {
   });
 }
 
-module.exports = { bookAppointment, listUpcomingAppointments, markReminderSent };
+/**
+ * The next occurrence of a weekday at a given local time, in the business
+ * timezone. weekday: 0=Sunday … 4=Thursday. Always at least 1 day out.
+ */
+function nextWeekdayAt(weekday, hour, minute = 0) {
+  const tz = CALENDAR_CONFIG.timezone;
+  const todayISO = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+  const [y, m, d] = todayISO.split('-').map(Number);
+  for (let i = 1; i <= 14; i++) {
+    const probe = new Date(Date.UTC(y, m - 1, d + i, 12, 0, 0)); // noon UTC = DST-safe
+    if (probe.getUTCDay() !== weekday) continue;
+    const iso = probe.toISOString().slice(0, 10);
+    const hhmm = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    return zonedTimeToUtc(iso, hhmm, tz);
+  }
+  return new Date(Date.now() + 86400000);
+}
+
+/** Writes a one-off event straight to a calendar — used by the website demo. */
+async function createDemoEvent({ calendarId, summary, description, start, end }) {
+  const calendar = getCalendar();
+  const res = await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary,
+      description,
+      start: { dateTime: start.toISOString(), timeZone: CALENDAR_CONFIG.timezone },
+      end: { dateTime: end.toISOString(), timeZone: CALENDAR_CONFIG.timezone },
+    },
+  });
+  return res.data;
+}
+
+module.exports = {
+  bookAppointment, listUpcomingAppointments, markReminderSent,
+  nextWeekdayAt, createDemoEvent,
+};

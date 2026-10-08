@@ -9,7 +9,7 @@ const path = require('path');
 const { incomingCallTwiml, replyTwiml, replyTwimlAudio, redirectCall, GREETING_TEXT } = require('./services/twilio');
 const { createDeepgramStream } = require('./services/deepgram');
 const { processUtterance, appendSystemNote, clearConversation, getConversation } = require('./services/llm');
-const { bookAppointment } = require('./services/calendar');
+const { bookAppointment, nextWeekdayAt, createDemoEvent } = require('./services/calendar');
 const tts = require('./services/tts');
 const bus = require('./services/eventBus');
 const { setMeta, getMeta, recordBooking, clearMeta } = require('./services/call-meta');
@@ -199,6 +199,75 @@ app.get('/demo', (req, res) => {
 
 app.get('/demo-manifest', (req, res) => {
   res.json({ audio: demoAudio });
+});
+
+// ─── DJ Tanveer demo (second brand, same deployment) ─────────────────────────
+
+const DJ_DEMO_LINES = {
+  l1: 'Hi, thanks for calling D J Tanveer. How can I help you today?',
+  l2: "Congratulations! Tanveer would love to hear about it. The best next step is a quick consultation call. What day and time work for you? We're available Monday through Saturday, ten to eight.",
+  l3: 'Thursday, October 15th at 2:00 PM is open. Can I get your full name?',
+  l4: 'Thanks, Priya. And your email address for the confirmation?',
+  l5: 'Let me read that back: p, r, i, y, a, dot, s, h, a, r, m, a, at gmail dot com. Did I get that right?',
+  l6: 'Perfect. Your consultation is set for Thursday, October 15th at 2:00 PM to plan the wedding reception, and the confirmation is on its way. Talk soon!',
+};
+const djDemoAudio = {};
+
+async function generateDjDemoAudio() {
+  if (!tts.isEnabled()) return;
+  for (const [id, text] of Object.entries(DJ_DEMO_LINES)) {
+    try {
+      const file = await tts.generateSpeech(text, 'demo');
+      if (file) djDemoAudio[id] = `${BASE_URL}/audio/${encodeURIComponent(file)}`;
+    } catch (err) {
+      console.error(`[DJ demo] Audio failed for ${id}:`, err.message);
+    }
+  }
+}
+
+app.get('/demo/dj', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'demo-dj.html'));
+});
+app.get('/demo/dj/manifest', (req, res) => res.json({ audio: djDemoAudio }));
+
+// Lets a demo viewer drop a genuine event on the DJ booking calendar. Public,
+// so it's rate limited per IP and every event is clearly marked as a demo.
+const djDemoHits = new Map(); // ip -> [timestamps]
+const DJ_DEMO_MAX_PER_HOUR = 5;
+
+app.post('/demo/dj/book', async (req, res) => {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID_DJ;
+  if (!calendarId) return res.status(503).json({ error: 'Demo calendar is not configured.' });
+
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || 'unknown';
+  const now = Date.now();
+  const recent = (djDemoHits.get(ip) || []).filter((t) => now - t < 3600 * 1000);
+  if (recent.length >= DJ_DEMO_MAX_PER_HOUR) {
+    return res.status(429).json({ error: 'Demo limit reached, try again later.' });
+  }
+  recent.push(now);
+  djDemoHits.set(ip, recent);
+
+  // Next Thursday at 2:00 PM Pacific, matching the scripted call.
+  const start = nextWeekdayAt(4, 14, 0);
+  const end = new Date(start.getTime() + 30 * 60 * 1000);
+
+  try {
+    const result = await createDemoEvent({
+      calendarId,
+      summary: '[Demo] Consultation – Priya Sharma',
+      description:
+        'Wedding reception consultation.\n' +
+        'Email: priya.sharma@gmail.com\n' +
+        'Booked from the DJ Tanveer website demo.',
+      start,
+      end,
+    });
+    res.json({ ok: true, link: result.htmlLink, start: start.toISOString() });
+  } catch (err) {
+    console.error('[DJ demo] Booking failed:', err.message);
+    res.status(500).json({ error: 'Could not add the booking right now.' });
+  }
 });
 
 app.get('/privacy', (req, res) => {
@@ -524,7 +593,7 @@ app.listen(PORT, async () => {
   console.log(`\n✅ AI Receptionist running on port ${PORT}`);
   console.log(`   Patient email:  ${email.isEnabled() ? `on (from ${process.env.GMAIL_SENDER})` : 'off (set GMAIL_* vars)'}`);
   startReminderLoop();
-  generateDemoAudio();
+  generateDemoAudio().then(generateDjDemoAudio);
   console.log(`   Dashboard:      ${BASE_URL}`);
   console.log(`   Twilio webhook: ${BASE_URL}/incoming-call  (HTTP POST)`);
 
