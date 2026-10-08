@@ -180,9 +180,16 @@ const DEMO_LINES = {
 };
 const demoAudio = {}; // line id -> public /audio URL
 
+// Pre-rendered ElevenLabs clips (see the DJ demo note below); falls back to
+// the Aura voice for any line without a committed file.
 async function generateDemoAudio() {
-  if (!tts.isEnabled()) return;
   for (const [id, text] of Object.entries(DEMO_LINES)) {
+    const clip = path.join(__dirname, 'public', 'demo-audio', 'clinic', `${id}.mp3`);
+    if (fs.existsSync(clip)) {
+      demoAudio[id] = `${BASE_URL}/demo-audio/clinic/${id}.mp3`;
+      continue;
+    }
+    if (!tts.isEnabled()) continue;
     try {
       const file = await tts.generateSpeech(text, 'demo');
       if (file) demoAudio[id] = `${BASE_URL}/audio/${encodeURIComponent(file)}`;
